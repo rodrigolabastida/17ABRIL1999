@@ -3,11 +3,12 @@ const cors = require('cors');
 const path = require('path');
 const Parser = require('rss-parser');
 const cron = require('node-cron');
+const cheerio = require('cheerio');
 
 const app = express();
 const parser = new Parser({
     customFields: {
-        item: ['description']
+        item: ['description', 'content:encoded', 'media:content', 'enclosure']
     }
 });
 
@@ -35,6 +36,69 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     const x = lat2 - lat1;
     const y = lon2 - lon1;
     return Math.sqrt(x * x + y * y);
+}
+
+// 1. Algoritmo de "Limpieza" Alta Resolución (Regex WP)
+function limpiarUrlAltaResolucion(url) {
+    if (!url) return null;
+    // Eliminar patrones de thumbnails WordPress (ej: -150x150, -1024x768)
+    let mejorada = url.replace(/-\d+x\d+(?=\.[a-zA-Z]+$)/, '');
+    // Eliminar etiqueta scale
+    mejorada = mejorada.replace('-scaled', '');
+    return mejorada;
+}
+
+// 2. Rastreo profundo de atributos y validación
+function extraerUrlImagen(item) {
+    let urlCruda = null;
+
+    // Prioridad 1: mediaContent
+    if (item['media:content'] && item['media:content'].$ && item['media:content'].$.url) {
+        urlCruda = item['media:content'].$.url;
+    } 
+    // Prioridad 2: Enclosure
+    else if (item.enclosure && item.enclosure.url && item.enclosure.type && item.enclosure.type.startsWith('image/')) {
+        urlCruda = item.enclosure.url;
+    } 
+    // Prioridad 3: Deep Extraction HTML (content:encoded / description)
+    else {
+        const htmlToSearch = item['content:encoded'] || item.content || item.description || '';
+        if (htmlToSearch) {
+            const $ = cheerio.load(htmlToSearch);
+            // Iterar para buscar atributos con imágenes de tamaño original o "lazy loading"
+            $('img').each((i, el) => {
+                const src = $(el).attr('data-lazy-src') || $(el).attr('data-src') || $(el).attr('srcset') || $(el).attr('src');
+                if (src) {
+                    if ($(el).attr('srcset') && src === $(el).attr('srcset')) {
+                        // Extraer la url de máxima resolución del srcset
+                        const particiones = src.split(',');
+                        urlCruda = particiones[particiones.length - 1].trim().split(' ')[0];
+                    } else {
+                        urlCruda = src;
+                    }
+                    return false; // rompe el ciclo each al encontrar el primer 'img'
+                }
+            });
+        }
+    }
+
+    // 3. Verificación de Carga y Limpieza Regex
+    if (urlCruda) {
+        let urlFinal = limpiarUrlAltaResolucion(urlCruda);
+        
+        // Validación mínima
+        try {
+            const parsed = new URL(urlFinal);
+            if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+                return urlFinal;
+            }
+        } catch {
+            // Ignorar y caer al fallback
+        }
+    }
+    
+    // 4. Fallback inquebrantable
+    return '/img/placeholder-noticia.jpg';
 }
 
 // Limpieza para evitar HTML en el componente de resumen
@@ -65,9 +129,7 @@ async function fetchAllRssFeeds() {
                 // Vistas simuladas basadas en rand y no dependientes
                 const randomViews = Math.floor(Math.random() * 14900) + 100;
                 
-                let imgMatch = null;
-                if(item.content) imgMatch = item.content.match(/<img[^>]+src="([^">]+)"/);
-                const imageUrl = (imgMatch && imgMatch[1]) ? imgMatch[1] : "https://images.unsplash.com/photo-1542204165-65bf26472b9b?auto=format&fit=crop&q=80&w=400";
+                const imageUrl = extraerUrlImagen(item);
                 
                 tempArray.push({
                     id: Math.random().toString(36).substr(2, 9),
@@ -80,6 +142,7 @@ async function fetchAllRssFeeds() {
                     views: randomViews,
                     summary: extractSummary(item.description || item.content),
                     image: imageUrl,
+                    imageUrl: imageUrl, // Nuevo atributo añadido para persistir compatibilidad y escalado
                     lat: randLat,
                     lng: randLng
                 });

@@ -79,7 +79,7 @@ function renderHero(noticia) {
     const heroHTML = `
         <article class="hero-card" data-id="${noticia.id}">
             <div class="hero-img-wrapper">
-                <img src="${noticia.image}" alt="${noticia.source}">
+                <img src="${noticia.imageUrl}" alt="${noticia.source}" onerror="this.src='/img/placeholder-noticia.jpg';">
                 <div class="hero-gradient">
                     <h2 class="hero-title">${noticia.title}</h2>
                     <div class="hero-meta">
@@ -103,7 +103,7 @@ function renderFeed(noticias) {
     noticias.forEach(noticia => {
         feedHTML += `
             <article class="news-card" data-id="${noticia.id}">
-                <img class="news-thumb" src="${noticia.image}" alt="${noticia.source}">
+                <img class="news-thumb" src="${noticia.imageUrl}" alt="${noticia.source}" onerror="this.src='/img/placeholder-noticia.jpg';">
                 <div class="news-info">
                     <h3 class="news-title">${noticia.title}</h3>
                     <div class="news-bottom">
@@ -139,7 +139,12 @@ function attachClickBindings() {
 }
 
 function openSummaryModal(article) {
-    document.getElementById('summary-img').src = article.image;
+    const summaryImg = document.getElementById('summary-img');
+    summaryImg.src = article.imageUrl;
+    summaryImg.onerror = function() {
+        this.src = '/img/placeholder-noticia.jpg';
+    };
+    
     document.getElementById('summary-source').textContent = article.source;
     document.getElementById('summary-title').textContent = article.title;
     document.getElementById('summary-desc').textContent = article.summary;
