@@ -250,6 +250,9 @@ cron.schedule('0 * * * *', () => fetchAllRssFeeds(true));
 
 // Adaptador para el frontend (Normalizar nombres de campos de DB a JSON)
 function formatearFront(row) {
+    // Si la noticia es vieja y no tiene slug, lo generamos al vuelo
+    const finalSlug = row.slug || (row.titulo ? generarSlug(row.titulo) : row.id);
+    
     return {
         id: row.id,
         title: row.titulo,
@@ -263,7 +266,7 @@ function formatearFront(row) {
         summary: row.resumen,
         image: row.imageUrl,
         imageUrl: row.imageUrl,
-        slug: row.slug,
+        slug: finalSlug,
         lat: row.lat,
         lng: row.lng
     };
