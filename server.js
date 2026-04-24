@@ -32,6 +32,10 @@ app.use(passport.session());
 app.get('/ping', (req, res) => res.send('pong'));
 
 const parser = new Parser({
+    headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml;q=0.9, */*;q=0.8'
+    },
     customFields: {
         item: ['description', 'content:encoded', 'media:content', 'enclosure']
     }
@@ -234,19 +238,44 @@ async function fetchAllRssFeeds(force = false) {
                 `, [Math.random().toString(36).substr(2, 9), item.title, summaryText, imageUrl, item.link, feedData.source, 
                    item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(), score, 100, '', 19.31, -98.24, new Date().toISOString(), slug]);
             }
-        } catch (err) { console.error(`Error en ${feedData.source}:`, err.message); }
+        } catch (err) { 
+            // Log más discreto para no alarmar al usuario si un feed falla temporalmente
+            console.log(`⚠️ Fuente ${feedData.source} no disponible temporalmente.`); 
+        }
     }
     console.log('✅ Extracción completada.');
 }
 
 cron.schedule('0 * * * *', () => fetchAllRssFeeds(true));
 
+// Adaptador para el frontend (Normalizar nombres de campos de DB a JSON)
+function formatearFront(row) {
+    return {
+        id: row.id,
+        title: row.titulo,
+        source: row.fuente,
+        link: row.linkOriginal,
+        pubDate: row.fecha_publicacion,
+        time: new Date(row.fecha_publicacion).toLocaleDateString(),
+        category: row.fuente,
+        puntuacion: row.puntuacion,
+        views: row.vistas,
+        summary: row.resumen,
+        image: row.imageUrl,
+        imageUrl: row.imageUrl,
+        slug: row.slug,
+        lat: row.lat,
+        lng: row.lng
+    };
+}
+
 // API v1
 app.get('/api/v1/feed', async (req, res) => {
     try {
         const rows = await dbQuery.all(`SELECT * FROM noticias ORDER BY (fecha_captura >= datetime('now', '-24 hours')) DESC, puntuacion DESC LIMIT 31`);
         if (!rows.length) return res.json({ noticiaPrincipal: null, noticiasSecundarias: [] });
-        res.json({ noticiaPrincipal: rows[0], noticiasSecundarias: rows.slice(1) });
+        const articles = rows.map(formatearFront);
+        res.json({ noticiaPrincipal: articles[0], noticiasSecundarias: articles.slice(1) });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -254,7 +283,7 @@ app.get('/api/v1/search', async (req, res) => {
     const q = `%${(req.query.q || '').trim()}%`;
     try {
         const rows = await dbQuery.all(`SELECT * FROM noticias WHERE titulo LIKE ? OR resumen LIKE ? LIMIT 50`, [q, q]);
-        res.json({ resultados: rows, relacionados: [] });
+        res.json({ resultados: rows.map(formatearFront), relacionados: [] });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
