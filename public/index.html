@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Intlax | Noticias</title>
+    <!-- Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- Boxicons para íconos -->
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <!-- Estilos -->
+    <link href="/css/style.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Top Bar -->
+    <header class="top-bar">
+        <h1 class="logo">Intlax</h1>
+        <div class="top-bar-icons">
+            <i class='bx bx-search'></i>
+            <div class="notification-icon">
+                <i class='bx bxs-bell'></i>
+                <span class="badge">2</span>
+            </div>
+            <img class="avatar" src="https://i.pravatar.cc/100?img=33" alt="User Profile">
+        </div>
+    </header>
+
+    <!-- Top Nav -->
+    <nav class="top-nav">
+        <ul class="nav-list" id="category-nav">
+            <li class="nav-item active">NOTICIAS</li>
+            <li class="nav-item">FOROS</li>
+            <li class="nav-item">DENUNCIAS</li>
+            <li class="nav-item">MI CIUDAD</li>
+            <li class="nav-item">EVENTOS</li>
+        </ul>
+    </nav>
+
+    <!-- Contenido Principal -->
+    <main class="content-wrapper">
+        <div id="hero-container">
+            <!-- Inyectado dinámicamente por JS -->
+        </div>
+
+        <div id="feed-container" class="feed-list">
+            <!-- Inyectado dinámicamente por JS -->
+        </div>
+    </main>
+
+    <!-- Bottom Nav -->
+    <nav class="bottom-nav">
+        <div class="bottom-nav-item active">
+            <i class='bx bxs-home' ></i>
+            <span>Inicio</span>
+        </div>
+        <div class="bottom-nav-item">
+            <i class='bx bx-search' ></i>
+            <span>Buscar</span>
+        </div>
+        <div class="bottom-nav-item">
+            <i class='bx bx-message-square-detail'></i>
+            <span>Foros</span>
+        </div>
+        <div class="bottom-nav-item">
+            <i class='bx bx-error-circle' ></i>
+            <span>Denuncias</span>
+        </div>
+        <div class="bottom-nav-item">
+            <i class='bx bx-user' ></i>
+            <span>Perfil</span>
+        </div>
+    </nav>
+
+    <script src="/js/main.js"></script>
+</body>
+</html>
