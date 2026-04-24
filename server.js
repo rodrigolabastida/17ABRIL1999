@@ -338,7 +338,97 @@ app.get('/noticias/:slug', async (req, res) => {
         const pct = Math.round((parseFloat(promedio) / 5) * 100);
         let barColor = promedio >= 4 ? '#22C55E' : (promedio >= 3 ? '#FFCC00' : '#EF4444');
 
-        const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>${noticia.titulo} | Intlax</title><link rel="stylesheet" href="/css/style.css"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet"><link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'><style>body{background:#121212;color:#fff;padding-bottom:80px;touch-action:manipulation}.news-hero{width:100%;height:300px;object-fit:cover;border-radius:0 0 20px 20px}.article-body{padding:20px}.article-title{font-size:26px;font-weight:800;margin:15px 0;line-height:1.2}.article-source{color:var(--accent);text-transform:uppercase;font-weight:700;font-size:12px;letter-spacing:1px}.article-summary{line-height:1.7;color:#ccc;font-size:16px;margin-bottom:25px}.community-card{background:var(--card-bg);padding:20px;border-radius:15px;margin-top:20px;border:1px solid #333}.rating-bar-container{height:12px;background:#333;border-radius:6px;overflow:hidden;margin:15px 0}.rating-fill{height:100%;transition:width 0.5s ease}.comment-bubble{background:#252525;padding:12px;border-radius:12px;margin-bottom:12px;border-left:4px solid var(--accent)}.back-nav{padding:15px;display:flex;align-items:center;gap:10px;background:rgba(18,18,18,0.8);backdrop-filter:blur(10px);position:sticky;top:0;z-index:100}</style></head><body><nav class="back-nav"><a href="/" style="color:#fff;font-size:24px;text-decoration:none"><i class='bx bx-arrow-back'></i></a><span style="font-weight:700">Noticias</span></nav><img src="${noticia.imageUrl}" class="news-hero" onerror="this.src='/img/placeholder-noticia.jpg'"><main class="article-body"><p class="article-source">${noticia.fuente}</p><h1 class="article-title">${noticia.titulo}</h1><p class="article-summary">${noticia.resumen}</p><a href="${noticia.linkOriginal}" class="btn-primary" style="display:block;text-align:center;text-decoration:none;margin-bottom:30px">VER NOTA COMPLETA</a><section class="community-card"><h3><i class='bx bxs-star'></i> Confiabilidad Intlax</h3><div class="rating-bar-container"><div class="rating-fill" style="width:${pct}%;background:${barColor}"></div></div><p style="font-size:14px;color:#888">${promedio} de 5 estrellas (${val.total || 0} votos comunitarios)</p></section><section class="community-card" style="margin-top:20px"><h3><i class='bx bxs-message-rounded-dots'></i> Comunidad (${comments.length})</h3><div id="comments-list" style="margin-top:15px">${comments.length ? comments.map(c => `<div class="comment-bubble"> <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px"><img src="${c.foto_perfil}" style="width:20px;height:20px;border-radius:50%"><b>${c.usuario_nombre}</b></div><p style="margin:0;font-size:14px">${c.comentario}</p></div>`).join('') : '<p style="color:#666">Sé el primero en comentar esta noticia.</p>'}</div>${req.isAuthenticated() ? `<div style="margin-top:20px"><textarea id="new-c" style="width:100%;background:#121212;border:1px solid #444;border-radius:10px;color:#fff;padding:12px" placeholder="Escribe tu opinión..."></textarea><button onclick="enviarC()" class="btn-primary" style="width:100%;margin-top:10px;border:none;cursor:pointer">Publicar Comentario</button></div>` : `<div style="text-align:center;padding:15px"><p style="font-size:14px;margin-bottom:10px">Inicia sesión para participar</p><a href="/auth/google" class="btn-secondary" style="text-decoration:none;display:inline-block">Entrar con Google</a></div>`}</section></main><script>async function enviarC(){const t=document.getElementById('new-c').value;if(!t)return;const r=await fetch('/api/v1/comentar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({noticia_id:'${noticia.id}',comentario:t})});if(r.ok)location.reload();}</script></body></html>`;
+        const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no text-size-adjust=none">
+    <title>${noticia.titulo} | Intlax</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <style>
+        :root { --accent: #FFCC00; --bg: #121212; --card: #1C1C1E; --text: #FFFFFF; --text-sec: #A0A0A0; }
+        * { margin: 0; padding: 0; box-box: border-box; }
+        body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; line-height: 1.6; padding-bottom: 50px; touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+        .top-nav { height: 60px; display: flex; align-items: center; padding: 0 20px; background: rgba(18,18,18,0.9); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100; border-bottom: 1px solid #333; }
+        .back-btn { color: #fff; font-size: 28px; text-decoration: none; margin-right: 15px; display: flex; align-items: center; }
+        .hero { width: 100%; height: 280px; object-fit: cover; }
+        .container { padding: 20px; }
+        .source-tag { color: var(--accent); font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; display: block; }
+        .article-title { font-size: 24px; font-weight: 800; line-height: 1.25; margin-bottom: 15px; }
+        .article-summary { color: var(--text-sec); font-size: 16px; margin-bottom: 25px; }
+        .main-btn { background: var(--accent); color: #000; font-weight: 800; text-align: center; padding: 15px; border-radius: 12px; text-decoration: none; display: block; margin-bottom: 30px; font-size: 16px; box-shadow: 0 4px 15px rgba(255,204,0,0.2); }
+        .section-card { background: var(--card); border-radius: 16px; padding: 20px; margin-bottom: 20px; border: 1px solid #2c2c2e; }
+        .section-title { font-size: 18px; font-weight: 800; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        .bar-outer { height: 12px; background: #333; border-radius: 6px; overflow: hidden; margin-bottom: 10px; }
+        .bar-inner { height: 100%; transition: width 0.8s ease-out; }
+        .comment { background: #252527; padding: 12px; border-radius: 12px; margin-bottom: 12px; border-left: 3px solid var(--accent); }
+        .comment-user { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+        .comment-img { width: 22px; height: 22px; border-radius: 50%; }
+        .comment-text { font-size: 14px; color: #ddd; }
+        .input-area { width: 100%; background: #121212; border: 1px solid #444; border-radius: 10px; color: #fff; padding: 12px; font-family: inherit; margin-top: 10px; box-sizing: border-box; }
+        .pub-btn { background: var(--accent); border: none; width: 100%; padding: 12px; border-radius: 10px; font-weight: 800; margin-top: 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <nav class="top-nav">
+        <a href="/" class="back-btn"><i class='bx bx-chevron-left'></i></a>
+        <span style="font-weight: 800; font-size: 18px;">Noticia</span>
+    </nav>
+    <img src="${noticia.imageUrl}" class="hero" onerror="this.src='/img/placeholder-noticia.jpg'">
+    <div class="container">
+        <span class="source-tag">${noticia.fuente}</span>
+        <h1 class="article-title">${noticia.titulo}</h1>
+        <p class="article-summary">${noticia.resumen}</p>
+        <a href="${noticia.linkOriginal}" class="main-btn">VER NOTA COMPLETA</a>
+
+        <div class="section-card">
+            <h3 class="section-title"><i class='bx bxs-check-shield' style="color:var(--accent)"></i> Confiabilidad</h3>
+            <div class="bar-outer">
+                <div class="bar-inner" style="width:${pct}%; background:${barColor}"></div>
+            </div>
+            <p style="font-size: 13px; color: var(--text-sec);">${promedio} de 5 Estrellas (${val.total || 0} ciudadanos han votado)</p>
+        </div>
+
+        <div class="section-card">
+            <h3 class="section-title"><i class='bx bxs-group' style="color:var(--accent)"></i> Comunidad</h3>
+            <div id="comments-box">
+                ${comments.length ? comments.map(c => `
+                    <div class="comment">
+                        <div class="comment-user">
+                            <img src="${c.foto_perfil}" class="comment-img">
+                            <span>${c.usuario_nombre}</span>
+                        </div>
+                        <p class="comment-text">${c.comentario}</p>
+                    </div>
+                `).join('') : '<p style="color:#666; font-size:14px; text-align:center; padding:10px;">Aún no hay comentarios. ¡Sé el primero!</p>'}
+            </div>
+            ${req.isAuthenticated() ? `
+                <div style="margin-top:15px; border-top:1px solid #333; padding-top:15px;">
+                    <textarea id="nc" class="input-area" placeholder="¿Qué opinas sobre esto?" rows="3"></textarea>
+                    <button onclick="sc()" class="pub-btn">Publicar mi opinión</button>
+                </div>
+            ` : `
+                <div style="text-align:center; margin-top:20px; border-top:1px solid #333; padding-top:20px;">
+                    <p style="font-size:14px; margin-bottom:10px;">Inicia sesión para participar en la comunidad.</p>
+                    <a href="/auth/google" class="main-btn" style="padding:10px; font-size:14px; background:#fff; color:#000;">Entrar con Google</a>
+                </div>
+            `}
+        </div>
+    </div>
+    <script>
+        async function sc(){
+            const t=document.getElementById('nc').value; if(!t)return;
+            const r=await fetch('/api/v1/comentar',{
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({noticia_id:'${noticia.id}',comentario:t})
+            });
+            if(r.ok) location.reload();
+        }
+    </script>
+</body>
+</html>`;
         res.send(html);
     } catch (err) { res.sendFile(path.join(__dirname, 'public/index.html')); }
 });
