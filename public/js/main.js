@@ -50,37 +50,44 @@ async function loadArticleBySlug(slug) {
 }
 
 function renderArticleDetail(noticia) {
-    document.body.style.overflow = 'auto';
+    document.body.style.overflow = 'hidden'; // Evitar scroll doble
+    
+    // Ocultar elementos globales para modo inmersivo
+    document.querySelector('.top-bar').style.display = 'none';
+    document.querySelector('.top-nav').style.display = 'none';
+    document.querySelector('.bottom-nav').style.display = 'none';
+
     const mainContainer = document.querySelector('main') || document.body;
     
     const pct = Math.round((noticia.puntuacion || 3) / 5 * 100);
     const barCol = (noticia.puntuacion || 3) >= 4 ? '#22C55E' : '#FFCC00';
 
     mainContainer.innerHTML = `
-        <div class="news-page-container" style="background:var(--bg); min-height:100vh; position:fixed; top:0; left:0; width:100%; z-index:9999; overflow-y:auto; padding-bottom:100px;">
-            <nav style="padding:15px; background:rgba(18,18,18,0.9); backdrop-filter:blur(10px); position:sticky; top:0; border-bottom:1px solid #333; display:flex; align-items:center; gap:15px;">
-                <a href="/" style="color:#fff; font-size:28px; text-decoration:none;"><i class='bx bx-chevron-left'></i></a>
-                <span style="font-weight:800;">Noticia</span>
+        <div class="news-page-container" style="background:var(--bg); min-height:100vh; position:fixed; top:0; left:0; width:100%; z-index:10000; overflow-y:auto; padding-bottom:60px; -webkit-overflow-scrolling:touch;">
+            <nav style="padding:15px; background:rgba(18,18,18,0.95); backdrop-filter:blur(15px); position:sticky; top:0; border-bottom:1px solid #333; display:flex; align-items:center; z-index:10001;">
+                <a href="/" style="color:#fff; font-size:32px; text-decoration:none; display:flex; align-items:center;"><i class='bx bx-chevron-left'></i></a>
+                <span style="font-weight:800; font-size:18px; margin-left:10px;">Noticia en Vivo</span>
             </nav>
-            <img src="${noticia.imageUrl}" style="width:100%; height:280px; object-fit:cover;" onerror="this.src='/img/placeholder-noticia.jpg'">
-            <div style="padding:20px;">
-                <span style="color:var(--accent); font-weight:800; font-size:11px; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; display:block;">${noticia.source}</span>
-                <h1 style="font-size:24px; font-weight:800; margin-bottom:15px; line-height:1.25;">${noticia.title}</h1>
-                <p style="color:var(--text-sec); font-size:16px; margin-bottom:25px;">${noticia.summary}</p>
-                <a href="${noticia.link}" class="btn-primary" style="display:block; text-align:center; text-decoration:none; margin-bottom:30px;">VER NOTA COMPLETA</a>
+            <img src="${noticia.imageUrl}" style="width:100%; height:320px; object-fit:cover; display:block;" onerror="this.src='/img/placeholder-noticia.jpg';">
+            <div style="padding:25px;">
+                <span style="color:var(--accent); font-weight:800; font-size:12px; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:12px; display:block;">${noticia.source}</span>
+                <h1 style="font-size:28px; font-weight:800; margin-bottom:18px; line-height:1.2; letter-spacing:-0.5px;">${noticia.title}</h1>
+                <p style="color:var(--text-sec); font-size:17px; margin-bottom:30px; line-height:1.7;">${noticia.summary}</p>
+                
+                <a href="${noticia.link}" class="btn-primary" style="display:block; text-align:center; text-decoration:none; margin-bottom:40px; padding:18px; font-size:17px; border-radius:15px; box-shadow:0 10px 30px rgba(255,204,0,0.2);">VER NOTA COMPLETA</a>
 
-                <div class="card" style="margin-bottom:20px;">
-                    <h3 style="font-size:18px; font-weight:800; margin-bottom:15px;"><i class='bx bxs-check-shield' style="color:var(--accent)"></i> Confiabilidad</h3>
-                    <div style="height:12px; background:#333; border-radius:6px; overflow:hidden; margin-bottom:10px;">
-                        <div style="width:${pct}%; height:100%; background:${barCol};"></div>
+                <div class="card" style="margin-bottom:25px; padding:25px; background:#1C1C1E; border-radius:20px; border:1px solid #333;">
+                    <h3 style="font-size:19px; font-weight:800; margin-bottom:18px; display:flex; align-items:center; gap:10px;"><i class='bx bxs-check-shield' style="color:var(--accent); font-size:24px;"></i> Confiabilidad Intlax</h3>
+                    <div style="height:14px; background:#333; border-radius:7px; overflow:hidden; margin-bottom:12px;">
+                        <div style="width:${pct}%; height:100%; background:${barCol}; box-shadow: 0 0 15px ${barCol}66;"></div>
                     </div>
-                    <p style="font-size:13px; color:var(--text-sec);">${noticia.puntuacion || 3} de 5 Estrellas comunitarias</p>
+                    <p style="font-size:14px; color:var(--text-sec); font-weight:600;">Puntaje: ${noticia.puntuacion || 3} de 5 Estrellas</p>
                 </div>
 
-                <div class="card">
-                    <h3 style="font-size:18px; font-weight:800; margin-bottom:15px;"><i class='bx bxs-group' style="color:var(--accent)"></i> Comunidad</h3>
+                <div class="card" style="padding:25px; background:#1C1C1E; border-radius:20px; border:1px solid #333; margin-bottom:50px;">
+                    <h3 style="font-size:19px; font-weight:800; margin-bottom:18px; display:flex; align-items:center; gap:10px;"><i class='bx bxs-group' style="color:var(--accent); font-size:24px;"></i> Comunidad</h3>
                     <div id="comments-router-box">
-                        <p style="color:#666; font-size:14px; text-align:center; padding:10px;">Cargando comentarios...</p>
+                        <p style="color:#666; font-size:14px; text-align:center; padding:20px;">Cargando comentarios...</p>
                     </div>
                 </div>
             </div>
