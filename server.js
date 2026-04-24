@@ -142,9 +142,15 @@ passport.deserializeUser(async (id, done) => {
 });
 
 // Función generadora de Slug SEO
-function generarSlug(titulo) {
-    if (!titulo) return Math.random().toString(36).substr(2, 9);
-    return titulo.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 80) + '-' + Math.random().toString(36).substr(2, 5);
+function generarSlug(texto) {
+    return (texto || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9\s-]/g, "")
+        .trim()
+        .replace(/\s+/g, "-")
+        .slice(0, 80) + '-' + Math.random().toString(36).substr(2, 5);
 }
 
 // Fuentes RSS
@@ -291,9 +297,13 @@ app.get('/api/v1/search', async (req, res) => {
 });
 
 app.get('/api/v1/noticias/:slug', async (req, res) => {
+    console.log(`🔍 SSR Request para slug: ${req.params.slug}`);
     try {
         const noticia = await dbQuery.get('SELECT * FROM noticias WHERE slug = ?', [req.params.slug]);
-        if (!noticia) return res.status(404).json({ error: 'Noticia no encontrada' });
+        if (!noticia) {
+            console.log(`⚠️ Noticia no encontrada en DB para slug: ${req.params.slug}. Rebotando a index.`);
+            return res.sendFile(path.join(__dirname, 'public/index.html'));
+        }
         const val = await dbQuery.get('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?', [noticia.id]);
         const comments = await dbQuery.all('SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil FROM comentarios c JOIN usuarios u ON c.user_id = u.id WHERE noticia_id = ? ORDER BY fecha DESC', [noticia.id]);
         res.json({ noticia, valoracion: val, comentarios: comments, user: req.user || null });

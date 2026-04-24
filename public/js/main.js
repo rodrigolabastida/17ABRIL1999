@@ -3,6 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('🚀 Intlax v7.0 Activo - Modo Router Híbrido');
     checkLocationPermission();
     setupBottomNav();
     checkUserSession();
