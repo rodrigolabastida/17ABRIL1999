@@ -1,13 +1,18 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const Parser = require('rss-parser');
-const cron = require('node-cron');
-const cheerio = require('cheerio');
 const Database = require('better-sqlite3');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const session = require('express-session');
+require('dotenv').config();
 
 const app = express();
 app.use(express.json());
+app.use(session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false
+}));
+app.use(passport.initialize());
+app.use(passport.session());
 const parser = new Parser({
     customFields: {
         item: ['description', 'content:encoded', 'media:content', 'enclosure']
@@ -20,6 +25,15 @@ const PORT = process.env.PORT || 3000;
 const db = new Database('intlax.db');
 
 db.exec(`
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        google_id TEXT UNIQUE,
+        nombre TEXT,
+        email TEXT,
+        foto_perfil TEXT,
+        puntos_reputacion INTEGER DEFAULT 0,
+        fecha_registro DATETIME DEFAULT (datetime('now'))
+    );
     CREATE TABLE IF NOT EXISTS noticias (
         id TEXT PRIMARY KEY,
         titulo TEXT,
@@ -39,18 +53,47 @@ db.exec(`
     CREATE TABLE IF NOT EXISTS comentarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         noticia_id TEXT,
-        usuario TEXT,
+        user_id INTEGER,
         comentario TEXT,
         fecha DATETIME DEFAULT (datetime('now')),
-        FOREIGN KEY (noticia_id) REFERENCES noticias(id)
+        FOREIGN KEY (noticia_id) REFERENCES noticias(id),
+        FOREIGN KEY (user_id) REFERENCES usuarios(id)
     );
     CREATE TABLE IF NOT EXISTS valoraciones (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         noticia_id TEXT,
+        user_id INTEGER,
         puntos INTEGER CHECK(puntos BETWEEN 1 AND 5),
-        FOREIGN KEY (noticia_id) REFERENCES noticias(id)
+        FOREIGN KEY (noticia_id) REFERENCES noticias(id),
+        FOREIGN KEY (user_id) REFERENCES usuarios(id)
     );
 `);
+
+// Configuración de Passport
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: process.env.GOOGLE_CALLBACK_URL
+}, (accessToken, refreshToken, profile, done) => {
+    let user = db.prepare('SELECT * FROM usuarios WHERE google_id = ?').get(profile.id);
+    if (!user) {
+        const info = {
+            google_id: profile.id,
+            nombre: profile.displayName,
+            email: profile.emails[0].value,
+            foto_perfil: profile.photos[0].value
+        };
+        const result = db.prepare('INSERT INTO usuarios (google_id, nombre, email, foto_perfil) VALUES (@google_id, @nombre, @email, @foto_perfil)').run(info);
+        user = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(result.lastInsertRowid);
+    }
+    return done(null, user);
+}));
+
+passport.serializeUser((user, done) => done(null, user.id));
+passport.deserializeUser((id, done) => {
+    const user = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(id);
+    done(null, user);
+});
 
 // Añadir columna slug si no existe (migración segura)
 try { db.exec("ALTER TABLE noticias ADD COLUMN slug TEXT"); } catch(e) { /* ya existe */ }
@@ -425,34 +468,58 @@ app.get('/api/v1/noticias/:slug', (req, res) => {
         extra.forEach(r => { if (!relacionadas.find(x => x.id === r.id)) relacionadas.push(r); });
     }
     
-    // Valoración promedio
+    // Valoración promedio y comentarios con nombres reales
     const valoracionRow = db.prepare('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?').get(noticia.id);
-    const comentariosRows = db.prepare('SELECT * FROM comentarios WHERE noticia_id = ? ORDER BY fecha DESC').all(noticia.id);
+    const comentariosRows = db.prepare(`
+        SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil 
+        FROM comentarios c 
+        JOIN usuarios u ON c.user_id = u.id 
+        WHERE c.noticia_id = ? 
+        ORDER BY c.fecha DESC
+    `).all(noticia.id);
     
     res.json({
         noticia: formatearFront(noticia),
         relacionadas: relacionadas.slice(0, 4).map(formatearFront),
         valoracion: { promedio: valoracionRow.promedio || 0, total: valoracionRow.total },
-        comentarios: comentariosRows
+        comentarios: comentariosRows,
+        user: req.user || null
     });
+});
+
+// Auth Routes
+app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/' }), (req, res) => res.redirect('/'));
+app.get('/auth/logout', (req, res) => {
+    req.logout(() => res.redirect('/'));
 });
 
 // POST /api/v1/valorar
 app.post('/api/v1/valorar', (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: 'Inicia sesión para valorar' });
     const { noticia_id, puntos } = req.body;
     if (!noticia_id || !puntos || puntos < 1 || puntos > 5) return res.status(400).json({ error: 'Datos inválidos' });
-    db.prepare('INSERT INTO valoraciones (noticia_id, puntos) VALUES (?, ?)').run(noticia_id, parseInt(puntos));
+    
+    // Upsert para valoración por usuario
+    const exist = db.prepare('SELECT id FROM valoraciones WHERE noticia_id = ? AND user_id = ?').get(noticia_id, req.user.id);
+    if (exist) {
+        db.prepare('UPDATE valoraciones SET puntos = ? WHERE id = ?').run(parseInt(puntos), exist.id);
+    } else {
+        db.prepare('INSERT INTO valoraciones (noticia_id, user_id, puntos) VALUES (?, ?, ?)').run(noticia_id, req.user.id, parseInt(puntos));
+    }
+
     const row = db.prepare('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?').get(noticia_id);
     res.json({ ok: true, promedio: row.promedio, total: row.total });
 });
 
 // POST /api/v1/comentar
 app.post('/api/v1/comentar', (req, res) => {
-    const { noticia_id, usuario, comentario } = req.body;
+    if (!req.isAuthenticated()) return res.status(401).json({ error: 'Inicia sesión para comentar' });
+    const { noticia_id, comentario } = req.body;
     if (!noticia_id || !comentario || comentario.trim().length < 3) return res.status(400).json({ error: 'Comentario inválido' });
-    const nombre = (usuario || 'Anónimo').trim().slice(0, 50);
-    db.prepare('INSERT INTO comentarios (noticia_id, usuario, comentario) VALUES (?, ?, ?)').run(noticia_id, nombre, comentario.trim().slice(0, 1000));
-    res.json({ ok: true });
+    
+    db.prepare('INSERT INTO comentarios (noticia_id, user_id, comentario) VALUES (?, ?, ?)').run(noticia_id, req.user.id, comentario.trim().slice(0, 1000));
+    res.json({ ok: true, user: req.user });
 });
 
 // ═══════════════════════════════════════
@@ -460,6 +527,9 @@ app.post('/api/v1/comentar', (req, res) => {
 // ═══════════════════════════════════════
 app.get('/api/feed', (req, res) => res.redirect(307, `/api/v1/feed${req.url.includes('?') ? '?' + req.url.split('?')[1] : ''}`));
 app.get('/api/search', (req, res) => res.redirect(307, `/api/v1/search${req.url.includes('?') ? '?' + req.url.split('?')[1] : ''}`));
+
+// Status de usuario
+app.get('/api/v1/user-status', (req, res) => res.json(req.user || {}));
 
 // ═══════════════════════════════════════
 // SSR: Página Individual de Noticia (SEO + Open Graph)
@@ -478,23 +548,44 @@ app.get('/noticias/:slug', (req, res) => {
     if (parseFloat(promedio) >= 4) barColor = '#22C55E';
     else if (parseFloat(promedio) >= 3) barColor = '#FFCC00';
     
-    const comentariosRows = db.prepare('SELECT * FROM comentarios WHERE noticia_id = ? ORDER BY fecha DESC LIMIT 20').all(noticia.id);
+    const comentariosRows = db.prepare(`
+        SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil 
+        FROM comentarios c 
+        JOIN usuarios u ON c.user_id = u.id 
+        WHERE c.noticia_id = ? 
+        ORDER BY c.fecha DESC 
+        LIMIT 20
+    `).all(noticia.id);
+
     const comentariosHTML = comentariosRows.length > 0
-        ? comentariosRows.map(c => `<div class="comentario-item"><span class="comentario-user">${c.usuario}</span><span class="comentario-fecha">${new Date(c.fecha).toLocaleDateString()}</span><p>${c.comentario}</p></div>`).join('')
+        ? comentariosRows.map(c => `
+            <div class="comentario-item">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <img src="${c.foto_perfil}" style="width:24px;height:24px;border-radius:50%">
+                    <span class="comentario-user">${c.usuario_nombre}</span>
+                    <span class="comentario-fecha">${new Date(c.fecha).toLocaleDateString()}</span>
+                </div>
+                <p>${c.comentario}</p>
+            </div>`).join('')
         : '<p class="sin-comentarios">Sé el primero en comentar.</p>';
     
+    const userAuthHTML = req.isAuthenticated() 
+        ? `<div class="comment-form">
+            <textarea id="c-comentario" placeholder="Escribe tu comentario..."></textarea>
+            <button class="btn-comment" onclick="enviarComentario('${noticia.id}')">Publicar comentario</button>
+           </div>`
+        : `<div style="text-align:center;padding:20px;background:#1C1C1E;border-radius:12px">
+            <p style="font-size:14px;color:#9E9E9E;margin-bottom:15px">Inicia sesión para participar en la comunidad</p>
+            <a href="/auth/google" class="btn-primary" style="text-decoration:none;display:inline-block">Login con Google</a>
+           </div>`;
+
+    const starBtnsHTML = req.isAuthenticated()
+        ? [1,2,3,4,5].map(n => `<button class="star-btn" onclick="votar(${n}, '${noticia.id}')">${n}⭐</button>`).join('')
+        : `<p style="font-size:12px;color:#666;margin-top:10px">Inicia sesión para valorar</p>`;
+    
     // Relacionadas
-    const palabrasClave = noticia.titulo.split(' ').filter(p => p.length > 4).slice(0, 3);
-    let relacionadas = [];
-    for (const palabra of palabrasClave) {
-        const rows = db.prepare(`SELECT * FROM noticias WHERE titulo LIKE ? AND id != ? LIMIT 2`).all(`%${palabra}%`, noticia.id);
-        rows.forEach(r => { if (!relacionadas.find(x => x.id === r.id)) relacionadas.push(r); });
-    }
-    if (relacionadas.length < 4) {
-        const extra = db.prepare(`SELECT * FROM noticias WHERE fuente = ? AND id != ? LIMIT ?`).all(noticia.fuente, noticia.id, 4 - relacionadas.length);
-        extra.forEach(r => { if (!relacionadas.find(x => x.id === r.id)) relacionadas.push(r); });
-    }
-    const relacionadasHTML = relacionadas.slice(0, 4).map(r => `
+    const relacionadasRows = db.prepare(`SELECT * FROM noticias WHERE fuente = ? AND id != ? LIMIT 4`).all(noticia.fuente, noticia.id);
+    const relacionadasHTML = relacionadasRows.map(r => `
         <a href="/noticias/${r.slug}" class="rel-card">
             <img src="${r.imageUrl}" alt="${r.titulo}" onerror="this.src='/img/placeholder-noticia.jpg'">
             <span>${r.titulo}</span>
@@ -528,7 +619,7 @@ body{background:#121212;color:#fff;padding-bottom:30px}
 .article-title{font-size:22px;font-weight:800;line-height:1.35;margin-bottom:14px}
 .article-date{font-size:12px;color:#9E9E9E;margin-bottom:20px}
 .article-summary{font-size:15px;color:#ccc;line-height:1.65;margin-bottom:24px}
-.btn-primary{background:#FFCC00;color:#121212;border:none;width:100%;padding:15px;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;margin-bottom:12px}
+.btn-primary{background:#FFCC00;color:#121212;border:none;width:100%;padding:15px;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;margin-bottom:12px;display:block;text-align:center}
 .btn-secondary-link{color:#9E9E9E;text-align:center;font-size:13px;text-decoration:underline;display:block;margin-bottom:28px}
 .section-title{font-size:16px;font-weight:700;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid #333}
 .rating-bar-wrap{background:#2A2A2C;border-radius:12px;padding:16px;margin-bottom:24px}
@@ -547,9 +638,8 @@ body{background:#121212;color:#fff;padding-bottom:30px}
 .comentario-item p{font-size:14px;color:#ccc;margin-top:8px;line-height:1.5}
 .sin-comentarios{color:#555;font-size:14px;text-align:center;padding:20px 0}
 .comment-form{margin-top:16px}
-.comment-form input,.comment-form textarea{width:100%;background:#1C1C1E;border:1px solid #333;color:#fff;border-radius:10px;padding:12px;font-size:14px;margin-bottom:10px;outline:none}
-.comment-form textarea{height:80px;resize:none}
-.comment-form input:focus,.comment-form textarea:focus{border-color:#FFCC00}
+.comment-form textarea{width:100%;background:#1C1C1E;border:1px solid #333;color:#fff;border-radius:10px;padding:12px;font-size:14px;margin-bottom:10px;outline:none;height:80px;resize:none}
+.comment-form textarea:focus{border-color:#FFCC00}
 .btn-comment{background:#FFCC00;color:#121212;border:none;border-radius:10px;padding:12px 20px;font-weight:700;cursor:pointer;width:100%}
 .related-section{margin-top:28px}
 .related-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -567,105 +657,30 @@ body{background:#121212;color:#fff;padding-bottom:30px}
     <a href="/" class="logo">Intlax</a>
     <button class="back-btn" onclick="history.back()"><i class='bx bx-arrow-back'></i></button>
 </header>
-
 <img class="hero-img" src="${noticia.imageUrl}" alt="${noticia.titulo}" onerror="this.src='/img/placeholder-noticia.jpg'">
-
 <div class="article-body">
     <p class="article-source">${noticia.fuente}</p>
     <h1 class="article-title">${noticia.titulo}</h1>
-    <p class="article-date">${new Date(noticia.fecha_publicacion).toLocaleDateString('es-MX', {year:'numeric',month:'long',day:'numeric'})}</p>
+    <p class="article-date">${new Date(noticia.fecha_publicacion).toLocaleDateString()}</p>
     <p class="article-summary">${noticia.resumen}</p>
-    
     <button class="btn-primary" onclick="abrirIframe('${noticia.linkOriginal}')">Ver nota completa</button>
-    <a href="${noticia.linkOriginal}" target="_blank" class="btn-secondary-link">Abrir en Safari/Chrome</a>
-
-    <!-- Valoración -->
     <div class="rating-bar-wrap">
-        <p class="section-title">¿Qué tan confiable es esta nota?</p>
-        <p class="rating-label">${totalVotos} valoraciones</p>
-        <div class="rating-bar-bg">
-            <div class="rating-bar-fill" id="rating-fill" style="width:${pct}%;background:${barColor}"></div>
-        </div>
+        <p class="section-title">Confiabilidad</p>
+        <div class="rating-bar-bg"><div class="rating-bar-fill" id="rating-fill" style="width:${pct}%;background:${barColor}"></div></div>
         <p class="rating-score" id="rating-score">${promedio}/5</p>
-        <p class="rating-total" id="rating-total">${totalVotos} votos</p>
-        <div class="star-buttons" id="star-buttons">
-            ${[1,2,3,4,5].map(n => `<button class="star-btn" onclick="votar(${n}, '${noticia.id}')">${n}⭐</button>`).join('')}
-        </div>
+        <div class="star-buttons">${starBtnsHTML}</div>
     </div>
-
-    <!-- Relacionadas -->
-    <div class="related-section">
-        <p class="section-title">Noticias Relacionadas</p>
-        <div class="related-grid">${relacionadasHTML}</div>
-    </div>
-
-    <!-- Comentarios -->
-    <div class="comments-section">
-        <p class="section-title">Comentarios</p>
-        <div id="comentarios-list">${comentariosHTML}</div>
-        <div class="comment-form">
-            <input type="text" id="c-usuario" placeholder="Tu nombre (opcional)">
-            <textarea id="c-comentario" placeholder="Escribe tu comentario..."></textarea>
-            <button class="btn-comment" onclick="enviarComentario('${noticia.id}')">Publicar comentario</button>
-        </div>
-    </div>
+    <div class="related-section"><p class="section-title">Relacionadas</p><div class="related-grid">${relacionadasHTML}</div></div>
+    <div class="comments-section"><p class="section-title">Comunidad</p><div id="comentarios-list">${comentariosHTML}</div>${userAuthHTML}</div>
 </div>
-
-<!-- Iframe Viewer -->
-<div class="full-modal" id="iframe-modal">
-    <div class="modal-top">
-        <span style="font-weight:800">Intlax</span>
-        <button style="background:none;border:none;color:#fff;font-size:26px;cursor:pointer" onclick="cerrarIframe()"><i class='bx bx-x'></i></button>
-    </div>
-    <iframe id="news-iframe" src="" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe>
-</div>
-
 <script>
-function abrirIframe(url) {
-    document.getElementById('news-iframe').src = url;
-    document.getElementById('iframe-modal').classList.add('active');
-}
-function cerrarIframe() {
-    document.getElementById('iframe-modal').classList.remove('active');
-    document.getElementById('news-iframe').src = '';
-}
-async function votar(puntos, id) {
-    const btns = document.querySelectorAll('.star-btn');
-    btns.forEach((b,i) => b.classList.toggle('selected', i < puntos));
-    try {
-        const r = await fetch('/api/v1/valorar', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({noticia_id:id,puntos})});
-        const data = await r.json();
-        const prom = parseFloat(data.promedio).toFixed(1);
-        const pct = Math.round((prom/5)*100);
-        let color = '#EF4444';
-        if (prom>=4) color='#22C55E'; else if (prom>=3) color='#FFCC00';
-        document.getElementById('rating-fill').style.width = pct+'%';
-        document.getElementById('rating-fill').style.background = color;
-        document.getElementById('rating-score').textContent = prom+'/5';
-        document.getElementById('rating-total').textContent = data.total+' votos';
-    } catch(e){}
-}
-async function enviarComentario(id) {
-    const usuario = document.getElementById('c-usuario').value.trim() || 'Anónimo';
-    const comentario = document.getElementById('c-comentario').value.trim();
-    if (!comentario || comentario.length < 3) return alert('Escribe un comentario válido.');
-    try {
-        await fetch('/api/v1/comentar', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({noticia_id:id,usuario,comentario})});
-        document.getElementById('c-comentario').value = '';
-        const nuevoItem = document.createElement('div');
-        nuevoItem.className = 'comentario-item';
-        nuevoItem.innerHTML = '<span class="comentario-user">'+usuario+'</span><span class="comentario-fecha">Ahora</span><p>'+comentario+'</p>';
-        const lista = document.getElementById('comentarios-list');
-        lista.insertBefore(nuevoItem, lista.firstChild);
-        const sinCom = lista.querySelector('.sin-comentarios');
-        if (sinCom) sinCom.remove();
-    } catch(e){ alert('Error al publicar.'); }
-}
+function abrirIframe(url){document.getElementById('news-iframe').src=url;document.getElementById('iframe-modal').classList.add('active');}
+function cerrarIframe(){document.getElementById('iframe-modal').classList.remove('active');document.getElementById('news-iframe').src='';}
+async function votar(puntos, id){try{const r=await fetch('/api/v1/valorar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({noticia_id:id,puntos})});const data=await r.json();if(data.promedio){const p=parseFloat(data.promedio).toFixed(1);document.getElementById('rating-score').textContent=p+'/5';document.getElementById('rating-fill').style.width=(p/5*100)+'%';}}catch(e){}}
+async function enviarComentario(id){const c=document.getElementById('c-comentario').value;if(!c)return;try{const r=await fetch('/api/v1/comentar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({noticia_id:id,comentario:c})});const d=await r.json();if(d.ok){location.reload();}}catch(e){}}
 </script>
 </body>
 </html>`;
-
-    res.send(htmlPage);
 });
 
 // ═══════════════════════════════════════

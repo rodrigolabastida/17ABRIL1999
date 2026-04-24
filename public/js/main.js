@@ -5,7 +5,25 @@ let searchDebounceTimeout = null;
 document.addEventListener('DOMContentLoaded', () => {
     checkLocationPermission();
     setupBottomNav();
+    checkUserSession();
 });
+
+async function checkUserSession() {
+    try {
+        const res = await fetch('/api/v1/feed'); // Usamos el feed para ver si viene el campo 'user', o crear un endpoint dedicado
+        // Refinamos: el endpoint /api/v1/feed no devuelve user por defecto en el JSON actual. 
+        // Creamos un fetch rápido a un endpoint que sí lo tenga o verificamos el estado.
+        // Dado que modifiqué las respuestas de noticias, voy a usar un endpoint que siempre tenga el user
+        const response = await fetch('/api/v1/user-status');
+        const user = await response.json();
+        const container = document.getElementById('user-auth-container');
+        if (user && user.id) {
+            container.innerHTML = `<img src="${user.foto_perfil}" style="width:32px;height:32px;border-radius:50%;border:2px solid var(--accent)" onclick="location.href='/auth/logout'">`;
+        } else {
+            container.innerHTML = `<i class='bx bxs-user-circle' style="font-size: 32px; color: var(--text-sec);" onclick="location.href='/auth/google'"></i>`;
+        }
+    } catch (e) {}
+}
 
 function checkLocationPermission() {
     const locPref = localStorage.getItem('intlax_loc_pref');
