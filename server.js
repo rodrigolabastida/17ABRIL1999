@@ -4,6 +4,7 @@ const path = require('path');
 const Parser = require('rss-parser');
 const cron = require('node-cron');
 const cheerio = require('cheerio');
+const Database = require('better-sqlite3');
 
 const app = express();
 const parser = new Parser({
@@ -14,8 +15,44 @@ const parser = new Parser({
 
 const PORT = process.env.PORT || 3000;
 
-// Caché global en memoria (Sin Base de Datos)
-let globalArticlesCache = [];
+// Inicialización de SQLite
+const db = new Database('intlax.db');
+
+db.exec(`
+    CREATE TABLE IF NOT EXISTS noticias (
+        id TEXT PRIMARY KEY,
+        titulo TEXT,
+        resumen TEXT,
+        imageUrl TEXT,
+        linkOriginal TEXT UNIQUE,
+        fuente TEXT,
+        fecha_publicacion DATETIME,
+        puntuacion INTEGER,
+        vistas INTEGER,
+        municipio TEXT,
+        lat REAL,
+        lng REAL,
+        fecha_captura DATETIME
+    )
+`);
+
+// Consulta preparada para Actualización Incremental (Upsert)
+const insertOrUpdateArticle = db.prepare(`
+    INSERT INTO noticias (
+        id, titulo, resumen, imageUrl, linkOriginal, fuente, 
+        fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura
+    ) VALUES (
+        @id, @titulo, @resumen, @imageUrl, @linkOriginal, @fuente, 
+        @fecha_publicacion, @puntuacion, @vistas, @municipio, @lat, @lng, @fecha_captura
+    ) 
+    ON CONFLICT(linkOriginal) DO UPDATE SET 
+        puntuacion = excluded.puntuacion,
+        vistas = excluded.vistas,
+        resumen = excluded.resumen,
+        imageUrl = excluded.imageUrl,
+        lat = excluded.lat,
+        lng = excluded.lng
+`);
 
 // Fuentes RSS
 const FEED_URLS = [
@@ -195,7 +232,7 @@ function calcularInteres(titulo, resumen) {
 // Extracción asíncrona de los Feeds
 async function fetchAllRssFeeds() {
     console.log('🔄 Extrayendo nuevos feeds RSS...');
-    let tempArray = [];
+    let agregadas = 0;
     
     for (const feedData of FEED_URLS) {
         try {
@@ -213,29 +250,29 @@ async function fetchAllRssFeeds() {
                 const summaryText = extractSummary(item.description || item.content);
                 const puntuacionEditorial = calcularInteres(item.title, summaryText);
                 
-                // Vistas simuladas vinculadas a la calificación para mantener compatibilidad gráfica con la UI
-                // Una nota de 100 pts tendrá alrededor de 10,000 "vistas". Una nota de 10 pts tendrá 1,000.
                 const simulatedViews = Math.max(100, Math.floor(puntuacionEditorial * 100) + Math.floor(Math.random() * 50));
                 
                 const imageUrl = await extraerUrlImagen(item);
                 
-                tempArray.push({
+                // Transición a SQLite: Upsert Real
+                insertOrUpdateArticle.run({
                     id: Math.random().toString(36).substr(2, 9),
-                    title: item.title,
-                    source: feedData.source,
-                    link: item.link,
-                    pubDate: item.pubDate,
-                    time: new Date(item.pubDate || new Date()).toLocaleDateString(), // Formato simple
-                    category: feedData.source, 
-                    puntuacion: puntuacionEditorial, // Nuevo atributo
-                    views: simulatedViews, // Manteniendo el viejo para el frontend
-                    summary: summaryText,
-                    image: imageUrl,
-                    imageUrl: imageUrl, // Nuevo atributo añadido para persistir compatibilidad y escalado
+                    titulo: item.title || 'Sin Título',
+                    resumen: summaryText,
+                    imageUrl: imageUrl,
+                    linkOriginal: item.link || String(Math.random()),
+                    fuente: feedData.source,
+                    fecha_publicacion: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
+                    puntuacion: puntuacionEditorial,
+                    vistas: simulatedViews,
+                    municipio: '', // Pendiente en caso de análisis estricto en futuro
                     lat: randLat,
-                    lng: randLng
+                    lng: randLng,
+                    fecha_captura: new Date().toISOString()
                 });
+                
                 count++;
+                agregadas++;
                 
                 // Pequeña pausa de 150ms para no saturar al sitio web real (prevención Anti-Bot)
                 await new Promise(r => setTimeout(r, 150));
@@ -245,62 +282,121 @@ async function fetchAllRssFeeds() {
         }
     }
     
-    // Sobrescribe el almacenamiento en RAM
-    globalArticlesCache = tempArray;
-    console.log(`✅ Extracción completada. ${globalArticlesCache.length} artículos almacenados en memoria.`);
+    console.log(`✅ Extracción completada. Operaciones SQLite (Insert/Update) procesadas: ${agregadas}.`);
 }
 
-// CronJob: Cada hora
+// CronJob de Extracción: Cada hora
 cron.schedule('0 * * * *', () => {
     fetchAllRssFeeds();
+});
+
+// CronJob de Supervivencia y Mantenimiento Diario: 3:00 AM
+cron.schedule('0 3 * * *', () => {
+    console.log('🧹 Limpieza Diaria de Base de Datos en progreso...');
+    try {
+        const result = db.prepare(`
+            DELETE FROM noticias 
+            WHERE fecha_captura <= datetime('now', '-30 days') 
+            AND vistas < 500 
+            AND id NOT IN (
+                SELECT id FROM noticias ORDER BY puntuacion DESC LIMIT 100
+            )
+        `).run();
+        console.log(`✅ Mantenimiento de Supervivencia ejecutado: ${result.changes} noticias descartadas de la base de datos.`);
+    } catch(err) {
+        console.error('Error durante limpieza DB:', err.message);
+    }
 });
 
 // Extraer en arranque inicial del servidor
 fetchAllRssFeeds();
 
-// GET /api/feed -> Con soporte Geolocation logic
+// Adaptador para el frontend (el front espera id, title, source, link, imageUrl, etc)
+function formatearFront(row) {
+    return {
+        id: row.id,
+        title: row.titulo,
+        source: row.fuente,
+        link: row.linkOriginal,
+        pubDate: row.fecha_publicacion,
+        time: new Date(row.fecha_publicacion).toLocaleDateString(),
+        category: row.fuente,
+        puntuacion: row.puntuacion,
+        views: row.vistas,
+        summary: row.resumen,
+        image: row.imageUrl,
+        imageUrl: row.imageUrl,
+        lat: row.lat,
+        lng: row.lng
+    };
+}
+
+// GET /api/feed -> Con soporte SQL directo a SQLite
 app.get('/api/feed', (req, res) => {
     const { lat, lng } = req.query;
     
-    let articles = [...globalArticlesCache];
+    let dbRows = [];
     
     if (lat && lng) {
+        // En geolocalización extraemos un pool abundante (top histórico por seguridad) para ordenar en JS (haversine)
+        dbRows = db.prepare(`
+            SELECT * FROM noticias 
+            ORDER BY (fecha_captura >= datetime('now', '-48 hours')) DESC, puntuacion DESC 
+            LIMIT 100
+        `).all();
+        
+        let articles = dbRows.map(formatearFront);
+        
         const userLat = parseFloat(lat);
         const userLng = parseFloat(lng);
-        // Distancia más corta primero
         articles.sort((a, b) => {
             const distA = calculateDistance(userLat, userLng, a.lat, a.lng);
             const distB = calculateDistance(userLat, userLng, b.lat, b.lng);
             return distA - distB; 
         });
+        
+        if(articles.length === 0) return res.json({ noticiaPrincipal: null, noticiasSecundarias: [] });
+        return res.json({
+            noticiaPrincipal: articles[0],
+            noticiasSecundarias: articles.slice(1, 31)
+        });
+        
     } else {
-        // Mayor puntuación de interés editorial primero
-        articles.sort((a, b) => b.puntuacion - a.puntuacion);
+        // Cargar últimos 24hrs de alta prioridad y complementar con archivo histórico relevante
+        dbRows = db.prepare(`
+            SELECT * FROM noticias 
+            ORDER BY 
+                (fecha_captura >= datetime('now', '-24 hours')) DESC, 
+                puntuacion DESC 
+            LIMIT 31
+        `).all();
+        
+        let articles = dbRows.map(formatearFront);
+        if(articles.length === 0) return res.json({ noticiaPrincipal: null, noticiasSecundarias: [] });
+        
+        return res.json({
+            noticiaPrincipal: articles[0],
+            noticiasSecundarias: articles.slice(1, 31)
+        });
     }
-    
-    if(articles.length === 0) {
-        return res.json({ noticiaPrincipal: null, noticiasSecundarias: [] });
-    }
-    
-    res.json({
-        noticiaPrincipal: articles[0],
-        noticiasSecundarias: articles.slice(1, 31) // Mandamos 30 al feed para no saturar 
-    });
 });
 
-// GET /api/search -> Buscador semántico en tiempo real
+// GET /api/search -> Buscador semántico SQL
 app.get('/api/search', (req, res) => {
-    const query = (req.query.q || '').toLowerCase().trim();
+    const query = (req.query.q || '').trim();
     if (!query) {
         return res.json({ resultados: [], relacionados: [] });
     }
 
-    // Filtramos buscando en titulo y resumen
-    const resultados = globalArticlesCache.filter(a => {
-        const titleMatch = a.title && a.title.toLowerCase().includes(query);
-        const summaryMatch = a.summary && a.summary.toLowerCase().includes(query);
-        return titleMatch || summaryMatch;
-    });
+    const likeTerm = `%${query}%`;
+    const dbRows = db.prepare(`
+        SELECT * FROM noticias 
+        WHERE titulo LIKE ? OR resumen LIKE ? 
+        ORDER BY puntuacion DESC 
+        LIMIT 50
+    `).all(likeTerm, likeTerm);
+
+    const resultados = dbRows.map(formatearFront);
 
     // Minería de Términos Relacionados (Top 5 palabras más repetidas)
     let relacionados = [];
