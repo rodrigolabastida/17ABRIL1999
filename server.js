@@ -10,6 +10,15 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
 require('dotenv').config();
 
+process.on('uncaughtException', (err) => {
+    console.error('❌ CRASH: Uncaught Exception:', err.message);
+    console.error(err.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ CRASH: Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 const app = express();
 app.use(express.json());
 app.use(session({
@@ -27,8 +36,15 @@ const parser = new Parser({
 
 const PORT = process.env.PORT || 3000;
 
-// Inicialización de SQLite
-const db = new Database('intlax.db');
+// Inicialización de SQLite con logs de error
+let db;
+try {
+    db = new Database('intlax.db', { verbose: console.log });
+    console.log('✅ Base de datos conectada correctamente.');
+} catch (err) {
+    console.error('❌ Error al abrir base de datos SQLite:', err.message);
+    process.exit(1);
+}
 
 db.exec(`
     CREATE TABLE IF NOT EXISTS usuarios (
