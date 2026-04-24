@@ -216,13 +216,17 @@ document.getElementById('input-busqueda').addEventListener('input', (e) => {
     const term = e.target.value.trim();
     clearTimeout(searchDebounceTimeout);
     
+    const resultadosContainer = document.getElementById('contenedor-resultados-busqueda');
+    const emptyStateHTML = `
+        <div id="empty-state-search" class="empty-state">
+            <i class='bx bx-search-alt-2'></i>
+            <p>No se encontraron resultados para tu búsqueda.</p>
+        </div>
+    `;
+
     if (term === '') {
         document.getElementById('contenedor-terminos').innerHTML = '';
-        const emptyState = document.getElementById('empty-state-search');
-        const resultadosContainer = document.getElementById('contenedor-resultados-busqueda');
-        resultadosContainer.innerHTML = '';
-        resultadosContainer.appendChild(emptyState);
-        emptyState.classList.remove('hidden');
+        resultadosContainer.innerHTML = emptyStateHTML;
         return;
     }
 
@@ -244,7 +248,6 @@ async function executeSearch(term) {
 function renderSearch(resultados, relacionados) {
     const terminosContainer = document.getElementById('contenedor-terminos');
     const resultadosContainer = document.getElementById('contenedor-resultados-busqueda');
-    const emptyState = document.getElementById('empty-state-search');
     
     // Interfaz Chips
     if (relacionados && relacionados.length > 0) {
@@ -255,8 +258,6 @@ function renderSearch(resultados, relacionados) {
 
     // Interfaz Resultados
     if (resultados && resultados.length > 0) {
-        emptyState.classList.add('hidden');
-        
         // Acoplar al array global sin duplicar
         resultados.forEach(r => {
             if(!globalArticles.find(a => a.id === r.id)) globalArticles.push(r);
@@ -297,9 +298,12 @@ function renderSearch(resultados, relacionados) {
         });
 
     } else {
-        resultadosContainer.innerHTML = '';
-        resultadosContainer.appendChild(emptyState);
-        emptyState.classList.remove('hidden');
+        resultadosContainer.innerHTML = `
+            <div id="empty-state-search" class="empty-state">
+                <i class='bx bx-search-alt-2'></i>
+                <p>No se encontraron resultados para tu búsqueda.</p>
+            </div>
+        `;
     }
 }
 
