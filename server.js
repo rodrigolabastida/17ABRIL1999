@@ -390,8 +390,8 @@ cron.schedule('0 3 * * *', () => {
     }
 });
 
-// Extraer en arranque inicial del servidor
-fetchAllRssFeeds();
+// Se ejecutará dentro del listen para no bloquear el arranque
+// fetchAllRssFeeds();
 
 // Adaptador para el frontend
 function formatearFront(row) {
@@ -699,4 +699,9 @@ app.get(/^(?!\/api|\/noticias\/).*$/, (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`🚀 Servidor de Intlax corriendo en el puerto ${PORT}`);
+    
+    // Ejecutar extracción inicial con un pequeño delay para asegurar estabilidad del puerto
+    setTimeout(() => {
+        fetchAllRssFeeds().catch(err => console.error("Error en extracción inicial:", err));
+    }, 1000);
 });
