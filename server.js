@@ -138,6 +138,60 @@ function extractSummary(desc) {
     return text || "Sin resumen disponible.";
 }
 
+// 1. Diccionarios de Palabras Clave
+const palabrasAltaRelevancia = [
+    "accidente", "muerto", "fallece", "detienen", "balacera", "robo", 
+    "asalto", "tragedia", "choque", "cateo", "rescate", "volcadura", 
+    "denuncia", "protesta", "bloqueo", "arma", "violencia", "homicidio"
+];
+
+const palabrasBajaRelevancia = [
+    "inaugura", "gobierno", "alcalde", "gobernadora", "entrega", "programa", 
+    "evento", "sesión", "cabildo", "conmemora", "celebra", "visita", 
+    "positivo", "obra", "rehabilitación"
+];
+
+// 2. Función de Puntuación Eficiente (Evitando Regex complejos)
+function calcularInteres(titulo, resumen) {
+    let puntuacion = 50; // Puntuación base
+
+    const txtTitulo = (titulo || "").toLowerCase();
+    const txtResumen = (resumen || "").toLowerCase();
+
+    // Contar coincidencias de Alta Relevancia
+    for (let i = 0; i < palabrasAltaRelevancia.length; i++) {
+        const palabra = palabrasAltaRelevancia[i];
+        
+        // Coincidencias en el título (Multiplicador de Título +15 y Base +25)
+        const countTitulo = txtTitulo.split(palabra).length - 1;
+        if (countTitulo > 0) {
+            puntuacion += (25 * countTitulo) + (15 * countTitulo);
+        }
+        
+        // Coincidencias en el resumen (Base +25)
+        const countResumen = txtResumen.split(palabra).length - 1;
+        if (countResumen > 0) {
+            puntuacion += (25 * countResumen);
+        }
+    }
+
+    // Contar coincidencias de Baja Relevancia
+    for (let i = 0; i < palabrasBajaRelevancia.length; i++) {
+        const palabra = palabrasBajaRelevancia[i];
+        
+        const countTitulo = txtTitulo.split(palabra).length - 1;
+        const countResumen = txtResumen.split(palabra).length - 1;
+        const totalCoins = countTitulo + countResumen;
+        
+        if (totalCoins > 0) {
+            // Resta -20 por cada coincidencia
+            puntuacion -= (20 * totalCoins);
+        }
+    }
+
+    return puntuacion;
+}
+
 // Extracción asíncrona de los Feeds
 async function fetchAllRssFeeds() {
     console.log('🔄 Extrayendo nuevos feeds RSS...');
@@ -155,8 +209,13 @@ async function fetchAllRssFeeds() {
                 const randLat = 19.31 + (Math.random() - 0.5) * 0.4;
                 const randLng = -98.24 + (Math.random() - 0.5) * 0.4;
                 
-                // Vistas simuladas basadas en rand y no dependientes
-                const randomViews = Math.floor(Math.random() * 14900) + 100;
+                // Sistema de Calificación de Interés Editorial
+                const summaryText = extractSummary(item.description || item.content);
+                const puntuacionEditorial = calcularInteres(item.title, summaryText);
+                
+                // Vistas simuladas vinculadas a la calificación para mantener compatibilidad gráfica con la UI
+                // Una nota de 100 pts tendrá alrededor de 10,000 "vistas". Una nota de 10 pts tendrá 1,000.
+                const simulatedViews = Math.max(100, Math.floor(puntuacionEditorial * 100) + Math.floor(Math.random() * 50));
                 
                 const imageUrl = await extraerUrlImagen(item);
                 
@@ -168,8 +227,9 @@ async function fetchAllRssFeeds() {
                     pubDate: item.pubDate,
                     time: new Date(item.pubDate || new Date()).toLocaleDateString(), // Formato simple
                     category: feedData.source, 
-                    views: randomViews,
-                    summary: extractSummary(item.description || item.content),
+                    puntuacion: puntuacionEditorial, // Nuevo atributo
+                    views: simulatedViews, // Manteniendo el viejo para el frontend
+                    summary: summaryText,
                     image: imageUrl,
                     imageUrl: imageUrl, // Nuevo atributo añadido para persistir compatibilidad y escalado
                     lat: randLat,
@@ -214,8 +274,8 @@ app.get('/api/feed', (req, res) => {
             return distA - distB; 
         });
     } else {
-        // Mayores vistas primero
-        articles.sort((a, b) => b.views - a.views);
+        // Mayor puntuación de interés editorial primero
+        articles.sort((a, b) => b.puntuacion - a.puntuacion);
     }
     
     if(articles.length === 0) {
