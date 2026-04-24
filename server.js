@@ -106,22 +106,27 @@ async function initDB() {
 }
 initDB();
 
-// Passport Config
-passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: process.env.GOOGLE_CALLBACK_URL
-}, async (accessToken, refreshToken, profile, done) => {
-    try {
-        let user = await dbQuery.get('SELECT * FROM usuarios WHERE google_id = ?', [profile.id]);
-        if (!user) {
-            const result = await dbQuery.run('INSERT INTO usuarios (google_id, nombre, email, foto_perfil) VALUES (?, ?, ?, ?)', 
-                [profile.id, profile.displayName, profile.emails[0].value, profile.photos[0].value]);
-            user = await dbQuery.get('SELECT * FROM usuarios WHERE id = ?', [result.lastID]);
-        }
-        return done(null, user);
-    } catch (err) { return done(err); }
-}));
+// Passport Config (Opcional si faltan variables de entorno)
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    passport.use(new GoogleStrategy({
+        clientID: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3000/auth/google/callback'
+    }, async (accessToken, refreshToken, profile, done) => {
+        try {
+            let user = await dbQuery.get('SELECT * FROM usuarios WHERE google_id = ?', [profile.id]);
+            if (!user) {
+                const result = await dbQuery.run('INSERT INTO usuarios (google_id, nombre, email, foto_perfil) VALUES (?, ?, ?, ?)', 
+                    [profile.id, profile.displayName, profile.emails[0].value, profile.photos[0].value]);
+                user = await dbQuery.get('SELECT * FROM usuarios WHERE id = ?', [result.lastID]);
+            }
+            return done(null, user);
+        } catch (err) { return done(err); }
+    }));
+    console.log('✅ Google OAuth configurado correctamente.');
+} else {
+    console.warn('⚠️ ADVERTENCIA: Faltan variables de entorno para Google OAuth. El login estará deshabilitado.');
+}
 
 passport.serializeUser((user, done) => done(null, user.id));
 passport.deserializeUser(async (id, done) => {
