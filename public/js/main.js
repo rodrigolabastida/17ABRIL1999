@@ -173,14 +173,17 @@ async function fetchNews(params = '') {
 function renderHero(noticia) {
     if(!noticia) return;
     const heroContainer = document.getElementById('hero-container');
+    // Envolvemos en un link para que sea nativo y más robusto
     heroContainer.innerHTML = `
-        <div class="hero-card" data-id="${noticia.id}">
-            <img class="hero-img" src="${noticia.imageUrl}" alt="${noticia.title}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
-            <div class="hero-overlay">
-                <span class="category-badge">${noticia.source}</span>
-                <h2 class="hero-title">${noticia.title}</h2>
+        <a href="/noticias/${noticia.slug}" class="hero-card-link" style="text-decoration:none; color:inherit;">
+            <div class="hero-card" data-id="${noticia.id}">
+                <img class="hero-img" src="${noticia.imageUrl}" alt="${noticia.title}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
+                <div class="hero-overlay">
+                    <span class="category-badge">${noticia.source}</span>
+                    <h2 class="hero-title">${noticia.title}</h2>
+                </div>
             </div>
-        </div>
+        </a>
     `;
 }
 
@@ -190,22 +193,24 @@ function renderFeed(noticias) {
     
     noticias.forEach(noticia => {
         feedHTML += `
-            <article class="news-card" data-id="${noticia.id}">
-                <img class="news-thumb" src="${noticia.imageUrl}" alt="${noticia.source}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
-                <div class="news-info">
-                    <h3 class="news-title">${noticia.title}</h3>
-                    <div class="news-bottom">
-                        <div class="news-meta">
-                            <span>${noticia.category}</span>
-                            <span>• ${(noticia.views/1000).toFixed(1)}K vistas</span>
-                        </div>
-                        <div class="news-actions">
-                            <i class='bx bx-message-rounded'></i>
-                            <i class='bx bx-share-alt' ></i>
+            <a href="/noticias/${noticia.slug}" class="news-card-link" style="text-decoration:none; color:inherit;">
+                <article class="news-card" data-id="${noticia.id}">
+                    <img class="news-thumb" src="${noticia.imageUrl}" alt="${noticia.source}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
+                    <div class="news-info">
+                        <h3 class="news-title">${noticia.title}</h3>
+                        <div class="news-bottom">
+                            <div class="news-meta">
+                                <span>${noticia.category}</span>
+                                <span>• ${(noticia.views/1000).toFixed(1)}K vistas</span>
+                            </div>
+                            <div class="news-actions">
+                                <i class='bx bx-message-rounded'></i>
+                                <i class='bx bx-share-alt' ></i>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </article>
+                </article>
+            </a>
         `;
     });
     
@@ -213,16 +218,9 @@ function renderFeed(noticias) {
 }
 
 function attachClickBindings() {
-    const cards = document.querySelectorAll('#hero-container .hero-card, #feed-container .news-card');
-    cards.forEach(card => {
-        card.addEventListener('click', () => {
-            const id = card.getAttribute('data-id');
-            const article = globalArticles.find(a => a.id === id);
-            if(article && article.slug) {
-                window.location.href = '/noticias/' + article.slug;
-            }
-        });
-    });
+    // Ya no es estrictamente necesario por los links nativos, 
+    // pero lo dejamos como respaldo para cualquier acción extra futura
+    console.log('✅ Navegación nativa activada');
 }
 
 function setupBottomNav() {
