@@ -29,6 +29,7 @@ app.use(session({
 }));
 app.use(passport.initialize());
 app.use(passport.session());
+app.get('/ping', (req, res) => res.send('pong'));
 
 const parser = new Parser({
     customFields: {
@@ -111,7 +112,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     passport.use(new GoogleStrategy({
         clientID: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3000/auth/google/callback'
+        callbackURL: "/auth/google/callback" // URL relativa: Passport detectará el host automáticamente
     }, async (accessToken, refreshToken, profile, done) => {
         try {
             let user = await dbQuery.get('SELECT * FROM usuarios WHERE google_id = ?', [profile.id]);
