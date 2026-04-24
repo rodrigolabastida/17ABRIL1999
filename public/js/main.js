@@ -159,7 +159,9 @@ function attachClickBindings() {
         new_card.addEventListener('click', () => {
             const id = new_card.getAttribute('data-id');
             const article = globalArticles.find(a => a.id === id);
-            if(article) openSummaryModal(article);
+            if(article && article.slug) {
+                window.location.href = `/noticias/${article.slug}`;
+            }
         });
     });
 }
@@ -316,7 +318,9 @@ function renderSearch(resultados, relacionados) {
             card.addEventListener('click', () => {
                 const id = card.getAttribute('data-id');
                 const article = globalArticles.find(a => a.id === id);
-                if(article) openSummaryModal(article);
+                if(article && article.slug) {
+                    window.location.href = `/noticias/${article.slug}`;
+                }
             });
         });
 
