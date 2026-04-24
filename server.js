@@ -49,7 +49,7 @@ function limpiarUrlAltaResolucion(url) {
 }
 
 // 2. Rastreo profundo de atributos y validación
-function extraerUrlImagen(item) {
+async function extraerUrlImagen(item) {
     let urlCruda = null;
 
     // Prioridad 1: mediaContent
@@ -65,39 +65,68 @@ function extraerUrlImagen(item) {
         const htmlToSearch = item['content:encoded'] || item.content || item.description || '';
         if (htmlToSearch) {
             const $ = cheerio.load(htmlToSearch);
-            // Iterar para buscar atributos con imágenes de tamaño original o "lazy loading"
+            // Iterar para buscar atributos
             $('img').each((i, el) => {
                 const src = $(el).attr('data-lazy-src') || $(el).attr('data-src') || $(el).attr('srcset') || $(el).attr('src');
                 if (src) {
                     if ($(el).attr('srcset') && src === $(el).attr('srcset')) {
-                        // Extraer la url de máxima resolución del srcset
                         const particiones = src.split(',');
                         urlCruda = particiones[particiones.length - 1].trim().split(' ')[0];
                     } else {
                         urlCruda = src;
                     }
-                    return false; // rompe el ciclo each al encontrar el primer 'img'
+                    return false;
                 }
             });
         }
     }
 
-    // 3. Verificación de Carga y Limpieza Regex
+    // Prioridad 4 (NUEVO EXTERNO): OpenGraph Web Scraping si no hay nada en el XML
+    if (!urlCruda && item.link) {
+        try {
+            const response = await fetch(item.link);
+            const htmlContent = await response.text();
+            const $ = cheerio.load(htmlContent);
+            // og:image es el principal
+            const ogImage = $('meta[property="og:image"]').attr('content');
+            if (ogImage) {
+                urlCruda = ogImage;
+            } else {
+                // Foto cruda del body
+                const firstImg = $('article img').first().attr('src') || $('main img').first().attr('src');
+                if (firstImg) urlCruda = firstImg;
+            }
+        } catch (e) {
+            // Si falla o bloquea, será null y caerá en el fallback
+        }
+    }
+
+    // 5. Verificación de Carga y Limpieza Regex
     if (urlCruda) {
-        let urlFinal = limpiarUrlAltaResolucion(urlCruda);
+        let urlFinal = limpiarUrlAltaResolucion(urlCruda).trim();
         
-        // Validación mínima
+        // Arreglar relativas
+        if (urlFinal.startsWith('//')) {
+            urlFinal = 'https:' + urlFinal;
+        } else if (urlFinal.startsWith('/')) {
+            try {
+                const base = new URL(item.link);
+                urlFinal = base.origin + urlFinal;
+            } catch (e) {}
+        }
+        
+        // Validación
         try {
             const parsed = new URL(urlFinal);
             if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
                 return urlFinal;
             }
         } catch {
-            // Ignorar y caer al fallback
+            if (urlFinal.includes('http')) return urlFinal;
         }
     }
     
-    // 4. Fallback inquebrantable
+    // 6. Fallback inquebrantable
     return '/img/placeholder-noticia.jpg';
 }
 
@@ -129,7 +158,7 @@ async function fetchAllRssFeeds() {
                 // Vistas simuladas basadas en rand y no dependientes
                 const randomViews = Math.floor(Math.random() * 14900) + 100;
                 
-                const imageUrl = extraerUrlImagen(item);
+                const imageUrl = await extraerUrlImagen(item);
                 
                 tempArray.push({
                     id: Math.random().toString(36).substr(2, 9),
@@ -147,6 +176,9 @@ async function fetchAllRssFeeds() {
                     lng: randLng
                 });
                 count++;
+                
+                // Pequeña pausa de 150ms para no saturar al sitio web real (prevención Anti-Bot)
+                await new Promise(r => setTimeout(r, 150));
             }
         } catch (err) {
             console.error(`Error procesando feed de ${feedData.source}:`, err.message);
