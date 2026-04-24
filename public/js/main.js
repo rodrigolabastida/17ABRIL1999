@@ -53,7 +53,7 @@ function getLocationAndFetch() {
 
 async function fetchNews(queryParams = '') {
     try {
-        const response = await fetch(`/api/feed${queryParams}`);
+        const response = await fetch(`/api/v1/feed${queryParams}`);
         const data = await response.json();
         
         if (data.noticiaPrincipal || data.noticiasSecundarias) {
@@ -147,6 +147,11 @@ function attachClickBindings() {
 }
 
 function openSummaryModal(article) {
+    // Actualizar URL del navegador con el slug (Deep Link + History API)
+    if (article.slug) {
+        window.history.pushState({ articleId: article.id }, '', `/noticias/${article.slug}`);
+    }
+    
     const summaryImg = document.getElementById('summary-img');
     summaryImg.src = article.imageUrl;
     summaryImg.onerror = function() {
@@ -237,7 +242,7 @@ document.getElementById('input-busqueda').addEventListener('input', (e) => {
 
 async function executeSearch(term) {
     try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(term)}`);
+        const response = await fetch(`/api/v1/search?q=${encodeURIComponent(term)}`);
         const data = await response.json();
         renderSearch(data.resultados, data.relacionados);
     } catch (e) {
