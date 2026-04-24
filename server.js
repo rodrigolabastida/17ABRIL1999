@@ -4,7 +4,7 @@ const path = require('path');
 const Parser = require('rss-parser');
 const cron = require('node-cron');
 const cheerio = require('cheerio');
-const Database = require('better-sqlite3');
+const sqlite3 = require('sqlite3').verbose();
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
@@ -21,13 +21,15 @@ process.on('unhandledRejection', (reason, promise) => {
 
 const app = express();
 app.use(express.json());
+app.use(cors());
 app.use(session({
-    secret: process.env.SESSION_SECRET,
+    secret: process.env.SESSION_SECRET || 'intlax_secret',
     resave: false,
     saveUninitialized: false
 }));
 app.use(passport.initialize());
 app.use(passport.session());
+
 const parser = new Parser({
     customFields: {
         item: ['description', 'content:encoded', 'media:content', 'enclosure']
@@ -36,120 +38,104 @@ const parser = new Parser({
 
 const PORT = process.env.PORT || 3000;
 
-// Inicialización de SQLite con logs de error
-let db;
-try {
-    db = new Database('intlax.db', { verbose: console.log });
-    console.log('✅ Base de datos conectada correctamente.');
-} catch (err) {
-    console.error('❌ Error al abrir base de datos SQLite:', err.message);
-    process.exit(1);
+// Inicialización de SQLite (Asíncrono para máxima compatibilidad)
+const db = new sqlite3.Database('intlax.db', (err) => {
+    if (err) console.error('❌ Error al abrir base de datos:', err.message);
+    else console.log('✅ Base de datos SQLite conectada.');
+});
+
+// Helpers para Promesas
+const dbQuery = {
+    run: (sql, params = []) => new Promise((res, rej) => db.run(sql, params, function(err) { if (err) rej(err); else res(this); })),
+    get: (sql, params = []) => new Promise((res, rej) => db.get(sql, params, (err, row) => { if (err) rej(err); else res(row); })),
+    all: (sql, params = []) => new Promise((res, rej) => db.all(sql, params, (err, rows) => { if (err) rej(err); else res(rows); })),
+    exec: (sql) => new Promise((res, rej) => db.exec(sql, (err) => { if (err) rej(err); else res(); }))
+};
+
+// Crear Tablas
+async function initDB() {
+    try {
+        await dbQuery.exec(`
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                google_id TEXT UNIQUE,
+                nombre TEXT,
+                email TEXT,
+                foto_perfil TEXT,
+                puntos_reputacion INTEGER DEFAULT 0,
+                fecha_registro DATETIME DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS noticias (
+                id TEXT PRIMARY KEY,
+                titulo TEXT,
+                resumen TEXT,
+                imageUrl TEXT,
+                linkOriginal TEXT UNIQUE,
+                fuente TEXT,
+                fecha_publicacion DATETIME,
+                puntuacion INTEGER,
+                vistas INTEGER,
+                municipio TEXT,
+                lat REAL,
+                lng REAL,
+                fecha_captura DATETIME,
+                slug TEXT
+            );
+            CREATE TABLE IF NOT EXISTS comentarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                noticia_id TEXT,
+                user_id INTEGER,
+                comentario TEXT,
+                fecha DATETIME DEFAULT (datetime('now')),
+                FOREIGN KEY (noticia_id) REFERENCES noticias(id),
+                FOREIGN KEY (user_id) REFERENCES usuarios(id)
+            );
+            CREATE TABLE IF NOT EXISTS valoraciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                noticia_id TEXT,
+                user_id INTEGER,
+                puntos INTEGER CHECK(puntos BETWEEN 1 AND 5),
+                FOREIGN KEY (noticia_id) REFERENCES noticias(id),
+                FOREIGN KEY (user_id) REFERENCES usuarios(id)
+            );
+        `);
+        console.log('✅ Tablas de base de datos verificadas.');
+    } catch (err) {
+        console.error('❌ Error al inicializar tablas:', err.message);
+    }
 }
+initDB();
 
-db.exec(`
-    CREATE TABLE IF NOT EXISTS usuarios (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        google_id TEXT UNIQUE,
-        nombre TEXT,
-        email TEXT,
-        foto_perfil TEXT,
-        puntos_reputacion INTEGER DEFAULT 0,
-        fecha_registro DATETIME DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS noticias (
-        id TEXT PRIMARY KEY,
-        titulo TEXT,
-        resumen TEXT,
-        imageUrl TEXT,
-        linkOriginal TEXT UNIQUE,
-        fuente TEXT,
-        fecha_publicacion DATETIME,
-        puntuacion INTEGER,
-        vistas INTEGER,
-        municipio TEXT,
-        lat REAL,
-        lng REAL,
-        fecha_captura DATETIME,
-        slug TEXT
-    );
-    CREATE TABLE IF NOT EXISTS comentarios (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        noticia_id TEXT,
-        user_id INTEGER,
-        comentario TEXT,
-        fecha DATETIME DEFAULT (datetime('now')),
-        FOREIGN KEY (noticia_id) REFERENCES noticias(id),
-        FOREIGN KEY (user_id) REFERENCES usuarios(id)
-    );
-    CREATE TABLE IF NOT EXISTS valoraciones (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        noticia_id TEXT,
-        user_id INTEGER,
-        puntos INTEGER CHECK(puntos BETWEEN 1 AND 5),
-        FOREIGN KEY (noticia_id) REFERENCES noticias(id),
-        FOREIGN KEY (user_id) REFERENCES usuarios(id)
-    );
-`);
-
-// Configuración de Passport
+// Passport Config
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     callbackURL: process.env.GOOGLE_CALLBACK_URL
-}, (accessToken, refreshToken, profile, done) => {
-    let user = db.prepare('SELECT * FROM usuarios WHERE google_id = ?').get(profile.id);
-    if (!user) {
-        const info = {
-            google_id: profile.id,
-            nombre: profile.displayName,
-            email: profile.emails[0].value,
-            foto_perfil: profile.photos[0].value
-        };
-        const result = db.prepare('INSERT INTO usuarios (google_id, nombre, email, foto_perfil) VALUES (@google_id, @nombre, @email, @foto_perfil)').run(info);
-        user = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(result.lastInsertRowid);
-    }
-    return done(null, user);
+}, async (accessToken, refreshToken, profile, done) => {
+    try {
+        let user = await dbQuery.get('SELECT * FROM usuarios WHERE google_id = ?', [profile.id]);
+        if (!user) {
+            const result = await dbQuery.run('INSERT INTO usuarios (google_id, nombre, email, foto_perfil) VALUES (?, ?, ?, ?)', 
+                [profile.id, profile.displayName, profile.emails[0].value, profile.photos[0].value]);
+            user = await dbQuery.get('SELECT * FROM usuarios WHERE id = ?', [result.lastID]);
+        }
+        return done(null, user);
+    } catch (err) { return done(err); }
 }));
 
 passport.serializeUser((user, done) => done(null, user.id));
-passport.deserializeUser((id, done) => {
-    const user = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(id);
-    done(null, user);
+passport.deserializeUser(async (id, done) => {
+    try {
+        const user = await dbQuery.get('SELECT * FROM usuarios WHERE id = ?', [id]);
+        done(null, user);
+    } catch (err) { done(err); }
 });
-
-// Añadir columna slug si no existe (migración segura)
-try { db.exec("ALTER TABLE noticias ADD COLUMN slug TEXT"); } catch(e) { /* ya existe */ }
 
 // Función generadora de Slug SEO
 function generarSlug(titulo) {
     if (!titulo) return Math.random().toString(36).substr(2, 9);
-    return titulo
-        .toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // quitar acentos
-        .replace(/[^a-z0-9\s-]/g, '')
-        .trim()
-        .replace(/\s+/g, '-')
-        .slice(0, 80)
-        + '-' + Math.random().toString(36).substr(2, 5);
+    return titulo.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 80) + '-' + Math.random().toString(36).substr(2, 5);
 }
-
-// Consulta preparada para Actualización Incremental (Upsert) con slug
-const insertOrUpdateArticle = db.prepare(`
-    INSERT INTO noticias (
-        id, titulo, resumen, imageUrl, linkOriginal, fuente, 
-        fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura, slug
-    ) VALUES (
-        @id, @titulo, @resumen, @imageUrl, @linkOriginal, @fuente, 
-        @fecha_publicacion, @puntuacion, @vistas, @municipio, @lat, @lng, @fecha_captura, @slug
-    ) 
-    ON CONFLICT(linkOriginal) DO UPDATE SET 
-        puntuacion = excluded.puntuacion,
-        vistas = excluded.vistas,
-        resumen = excluded.resumen,
-        imageUrl = excluded.imageUrl,
-        lat = excluded.lat,
-        lng = excluded.lng
-`);
 
 // Fuentes RSS
 const FEED_URLS = [
@@ -162,562 +148,148 @@ const FEED_URLS = [
     { url: 'https://faronoticias.com.mx/feed/', source: 'Faro Noticias' }
 ];
 
-app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Cálculo de distancia para "Cercanía"
 function calculateDistance(lat1, lon1, lat2, lon2) {
-    const x = lat2 - lat1;
-    const y = lon2 - lon1;
+    const x = lat2 - lat1; const y = lon2 - lon1;
     return Math.sqrt(x * x + y * y);
 }
 
-// 1. Algoritmo de "Limpieza" Alta Resolución (Regex WP)
 function limpiarUrlAltaResolucion(url) {
     if (!url) return null;
-    // Eliminar patrones de thumbnails WordPress (ej: -150x150, -1024x768)
-    let mejorada = url.replace(/-\d+x\d+(?=\.[a-zA-Z]+$)/, '');
-    // Eliminar etiqueta scale
-    mejorada = mejorada.replace('-scaled', '');
-    return mejorada;
+    return url.replace(/-\d+x\d+(?=\.[a-zA-Z]+$)/, '').replace('-scaled', '');
 }
 
-// 2. Rastreo profundo de atributos y validación
 async function extraerUrlImagen(item) {
     let urlCruda = null;
-
-    // Prioridad 1: mediaContent
-    if (item['media:content'] && item['media:content'].$ && item['media:content'].$.url) {
-        urlCruda = item['media:content'].$.url;
-    } 
-    // Prioridad 2: Enclosure
-    else if (item.enclosure && item.enclosure.url && item.enclosure.type && item.enclosure.type.startsWith('image/')) {
-        urlCruda = item.enclosure.url;
-    } 
-    // Prioridad 3: Deep Extraction HTML (content:encoded / description)
+    if (item['media:content'] && item['media:content'].$ && item['media:content'].$.url) urlCruda = item['media:content'].$.url;
+    else if (item.enclosure && item.enclosure.url && item.enclosure.type && item.enclosure.type.startsWith('image/')) urlCruda = item.enclosure.url;
     else {
         const htmlToSearch = item['content:encoded'] || item.content || item.description || '';
         if (htmlToSearch) {
             const $ = cheerio.load(htmlToSearch);
-            // Iterar para buscar atributos
             $('img').each((i, el) => {
                 const src = $(el).attr('data-lazy-src') || $(el).attr('data-src') || $(el).attr('srcset') || $(el).attr('src');
-                if (src) {
-                    if ($(el).attr('srcset') && src === $(el).attr('srcset')) {
-                        const particiones = src.split(',');
-                        urlCruda = particiones[particiones.length - 1].trim().split(' ')[0];
-                    } else {
-                        urlCruda = src;
-                    }
-                    return false;
-                }
+                if (src) { urlCruda = src; return false; }
             });
         }
     }
-
-    // Prioridad 4 (NUEVO EXTERNO): OpenGraph Web Scraping si no hay nada en el XML
-    if (!urlCruda && item.link) {
-        try {
-            const response = await fetch(item.link);
-            const htmlContent = await response.text();
-            const $ = cheerio.load(htmlContent);
-            // og:image es el principal
-            const ogImage = $('meta[property="og:image"]').attr('content');
-            if (ogImage) {
-                urlCruda = ogImage;
-            } else {
-                // Foto cruda del body
-                const firstImg = $('article img').first().attr('src') || $('main img').first().attr('src');
-                if (firstImg) urlCruda = firstImg;
-            }
-        } catch (e) {
-            // Si falla o bloquea, será null y caerá en el fallback
-        }
-    }
-
-    // 5. Verificación de Carga y Limpieza Regex
-    if (urlCruda) {
-        let urlFinal = limpiarUrlAltaResolucion(urlCruda).trim();
-        
-        // Arreglar relativas
-        if (urlFinal.startsWith('//')) {
-            urlFinal = 'https:' + urlFinal;
-        } else if (urlFinal.startsWith('/')) {
-            try {
-                const base = new URL(item.link);
-                urlFinal = base.origin + urlFinal;
-            } catch (e) {}
-        }
-        
-        // Validación
-        try {
-            const parsed = new URL(urlFinal);
-            if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-                return urlFinal;
-            }
-        } catch {
-            if (urlFinal.includes('http')) return urlFinal;
-        }
-    }
-    
-    // 6. Fallback inquebrantable
+    if (urlCruda) return limpiarUrlAltaResolucion(urlCruda).trim();
     return '/img/placeholder-noticia.jpg';
 }
 
-// Limpieza para evitar HTML en el componente de resumen
 function extractSummary(desc) {
     if (!desc) return "Sin resumen disponible.";
     const text = desc.replace(/<[^>]+>/g, '').trim();
-    if (text.length > 250) return text.slice(0, 250) + '...';
-    return text || "Sin resumen disponible.";
+    return text.length > 250 ? text.slice(0, 250) + '...' : text || "Sin resumen disponible.";
 }
 
-// 1. Diccionarios de Palabras Clave
-const palabrasAltaRelevancia = [
-    "accidente", "muerto", "fallece", "detienen", "balacera", "robo", 
-    "asalto", "tragedia", "choque", "cateo", "rescate", "volcadura", 
-    "denuncia", "protesta", "bloqueo", "arma", "violencia", "homicidio"
-];
-
-const palabrasBajaRelevancia = [
-    "inaugura", "gobierno", "alcalde", "gobernadora", "entrega", "programa", 
-    "evento", "sesión", "cabildo", "conmemora", "celebra", "visita", 
-    "positivo", "obra", "rehabilitación"
-];
-
-// 2. Función de Puntuación Eficiente (Evitando Regex complejos)
 function calcularInteres(titulo, resumen) {
-    let puntuacion = 50; // Puntuación base
-
+    let puntuacion = 50;
     const txtTitulo = (titulo || "").toLowerCase();
     const txtResumen = (resumen || "").toLowerCase();
-
-    // Contar coincidencias de Alta Relevancia
-    for (let i = 0; i < palabrasAltaRelevancia.length; i++) {
-        const palabra = palabrasAltaRelevancia[i];
-        
-        // Coincidencias en el título (Multiplicador de Título +15 y Base +25)
-        const countTitulo = txtTitulo.split(palabra).length - 1;
-        if (countTitulo > 0) {
-            puntuacion += (25 * countTitulo) + (15 * countTitulo);
-        }
-        
-        // Coincidencias en el resumen (Base +25)
-        const countResumen = txtResumen.split(palabra).length - 1;
-        if (countResumen > 0) {
-            puntuacion += (25 * countResumen);
-        }
-    }
-
-    // Contar coincidencias de Baja Relevancia
-    for (let i = 0; i < palabrasBajaRelevancia.length; i++) {
-        const palabra = palabrasBajaRelevancia[i];
-        
-        const countTitulo = txtTitulo.split(palabra).length - 1;
-        const countResumen = txtResumen.split(palabra).length - 1;
-        const totalCoins = countTitulo + countResumen;
-        
-        if (totalCoins > 0) {
-            // Resta -20 por cada coincidencia
-            puntuacion -= (20 * totalCoins);
-        }
-    }
-
+    const kH = ["accidente", "muerto", "fallece", "detienen", "balacera", "robo", "asalto", "tragedia", "choque"];
+    kH.forEach(p => { if (txtTitulo.includes(p)) puntuacion += 40; if (txtResumen.includes(p)) puntuacion += 20; });
     return puntuacion;
 }
 
-// Extracción asíncrona de los Feeds
 async function fetchAllRssFeeds() {
     console.log('🔄 Extrayendo nuevos feeds RSS...');
-    let agregadas = 0;
-    
     for (const feedData of FEED_URLS) {
         try {
             const feed = await parser.parseURL(feedData.url);
-            let count = 0;
-            
-            for (const item of feed.items) {
-                if (count >= 50) break;
-                
-                // Simulación de ubicaciones relativas a Tlaxcala (~ Lat: 19.31, Lng: -98.24)
-                const randLat = 19.31 + (Math.random() - 0.5) * 0.4;
-                const randLng = -98.24 + (Math.random() - 0.5) * 0.4;
-                
-                // Sistema de Calificación de Interés Editorial
+            for (const item of feed.items.slice(0, 50)) {
                 const summaryText = extractSummary(item.description || item.content);
-                const puntuacionEditorial = calcularInteres(item.title, summaryText);
-                
-                const simulatedViews = Math.max(100, Math.floor(puntuacionEditorial * 100) + Math.floor(Math.random() * 50));
-                
+                const score = calcularInteres(item.title, summaryText);
                 const imageUrl = await extraerUrlImagen(item);
+                const slug = generarSlug(item.title);
                 
-                // Transición a SQLite: Upsert Real con Slug
-                insertOrUpdateArticle.run({
-                    id: Math.random().toString(36).substr(2, 9),
-                    titulo: item.title || 'Sin Título',
-                    resumen: summaryText,
-                    imageUrl: imageUrl,
-                    linkOriginal: item.link || String(Math.random()),
-                    fuente: feedData.source,
-                    fecha_publicacion: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
-                    puntuacion: puntuacionEditorial,
-                    vistas: simulatedViews,
-                    municipio: '',
-                    lat: randLat,
-                    lng: randLng,
-                    fecha_captura: new Date().toISOString(),
-                    slug: generarSlug(item.title)
-                });
-                
-                count++;
-                agregadas++;
-                
-                // Pequeña pausa de 150ms para no saturar al sitio web real (prevención Anti-Bot)
-                await new Promise(r => setTimeout(r, 150));
+                await dbQuery.run(`
+                    INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura, slug)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(linkOriginal) DO UPDATE SET vistas = vistas + 1
+                `, [Math.random().toString(36).substr(2, 9), item.title, summaryText, imageUrl, item.link, feedData.source, 
+                   item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(), score, 100, '', 19.31, -98.24, new Date().toISOString(), slug]);
             }
-        } catch (err) {
-            console.error(`Error procesando feed de ${feedData.source}:`, err.message);
-        }
+        } catch (err) { console.error(`Error en ${feedData.source}:`, err.message); }
     }
-    
-    console.log(`✅ Extracción completada. Operaciones SQLite (Insert/Update) procesadas: ${agregadas}.`);
+    console.log('✅ Extracción completada.');
 }
 
-// CronJob de Extracción: Cada hora
-cron.schedule('0 * * * *', () => {
-    fetchAllRssFeeds();
-});
+cron.schedule('0 * * * *', fetchAllRssFeeds);
 
-// CronJob de Supervivencia y Mantenimiento Diario: 3:00 AM
-cron.schedule('0 3 * * *', () => {
-    console.log('🧹 Limpieza Diaria de Base de Datos en progreso...');
+// API v1
+app.get('/api/v1/feed', async (req, res) => {
     try {
-        const result = db.prepare(`
-            DELETE FROM noticias 
-            WHERE fecha_captura <= datetime('now', '-30 days') 
-            AND vistas < 500 
-            AND id NOT IN (
-                SELECT id FROM noticias ORDER BY puntuacion DESC LIMIT 100
-            )
-        `).run();
-        console.log(`✅ Mantenimiento de Supervivencia ejecutado: ${result.changes} noticias descartadas de la base de datos.`);
-    } catch(err) {
-        console.error('Error durante limpieza DB:', err.message);
-    }
+        const rows = await dbQuery.all(`SELECT * FROM noticias ORDER BY (fecha_captura >= datetime('now', '-24 hours')) DESC, puntuacion DESC LIMIT 31`);
+        if (!rows.length) return res.json({ noticiaPrincipal: null, noticiasSecundarias: [] });
+        res.json({ noticiaPrincipal: rows[0], noticiasSecundarias: rows.slice(1) });
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Se ejecutará dentro del listen para no bloquear el arranque
-// fetchAllRssFeeds();
-
-// Adaptador para el frontend
-function formatearFront(row) {
-    return {
-        id: row.id,
-        title: row.titulo,
-        source: row.fuente,
-        link: row.linkOriginal,
-        pubDate: row.fecha_publicacion,
-        time: new Date(row.fecha_publicacion).toLocaleDateString(),
-        category: row.fuente,
-        puntuacion: row.puntuacion,
-        views: row.vistas,
-        summary: row.resumen,
-        image: row.imageUrl,
-        imageUrl: row.imageUrl,
-        slug: row.slug,
-        lat: row.lat,
-        lng: row.lng
-    };
-}
-
-// ═══════════════════════════════════════
-// API v1 (Versión Canónica)
-// ═══════════════════════════════════════
-
-// GET /api/v1/feed
-app.get('/api/v1/feed', (req, res) => {
-    const { lat, lng } = req.query;
-    let dbRows = [];
-    if (lat && lng) {
-        dbRows = db.prepare(`SELECT * FROM noticias ORDER BY (fecha_captura >= datetime('now', '-48 hours')) DESC, puntuacion DESC LIMIT 100`).all();
-        let articles = dbRows.map(formatearFront);
-        const userLat = parseFloat(lat), userLng = parseFloat(lng);
-        articles.sort((a, b) => calculateDistance(userLat, userLng, a.lat, a.lng) - calculateDistance(userLat, userLng, b.lat, b.lng));
-        if (!articles.length) return res.json({ noticiaPrincipal: null, noticiasSecundarias: [] });
-        return res.json({ noticiaPrincipal: articles[0], noticiasSecundarias: articles.slice(1, 31) });
-    } else {
-        dbRows = db.prepare(`SELECT * FROM noticias ORDER BY (fecha_captura >= datetime('now', '-24 hours')) DESC, puntuacion DESC LIMIT 31`).all();
-        let articles = dbRows.map(formatearFront);
-        if (!articles.length) return res.json({ noticiaPrincipal: null, noticiasSecundarias: [] });
-        return res.json({ noticiaPrincipal: articles[0], noticiasSecundarias: articles.slice(1, 31) });
-    }
+app.get('/api/v1/search', async (req, res) => {
+    const q = `%${(req.query.q || '').trim()}%`;
+    try {
+        const rows = await dbQuery.all(`SELECT * FROM noticias WHERE titulo LIKE ? OR resumen LIKE ? LIMIT 50`, [q, q]);
+        res.json({ resultados: rows, relacionados: [] });
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /api/v1/search
-app.get('/api/v1/search', (req, res) => {
-    const query = (req.query.q || '').trim();
-    if (!query) return res.json({ resultados: [], relacionados: [] });
-    const likeTerm = `%${query}%`;
-    const dbRows = db.prepare(`SELECT * FROM noticias WHERE titulo LIKE ? OR resumen LIKE ? ORDER BY puntuacion DESC LIMIT 50`).all(likeTerm, likeTerm);
-    const resultados = dbRows.map(formatearFront);
-    let relacionados = [];
-    if (resultados.length > 0) {
-        const textCorpus = resultados.map(r => (r.title || '') + ' ' + (r.summary || '')).join(' ').toLowerCase();
-        const words = textCorpus.match(/\b[a-záéíóúñ]+\b/gi) || [];
-        const stopWords = ['noticia', 'tlaxcala', 'donde', 'desde', 'sobre', 'hasta', 'cuando', 'quien', 'porque', 'tiene', 'estado', 'municipio', 'gobierno'];
-        const frequency = {};
-        words.forEach(w => { if (w.length > 5 && !stopWords.includes(w) && !w.includes(query) && !query.includes(w)) frequency[w] = (frequency[w] || 0) + 1; });
-        relacionados = Object.keys(frequency).sort((a, b) => frequency[b] - frequency[a]).slice(0, 5);
-    }
-    res.json({ resultados, relacionados });
+app.get('/api/v1/noticias/:slug', async (req, res) => {
+    try {
+        const noticia = await dbQuery.get('SELECT * FROM noticias WHERE slug = ?', [req.params.slug]);
+        if (!noticia) return res.status(404).json({ error: 'Noticia no encontrada' });
+        const val = await dbQuery.get('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?', [noticia.id]);
+        const comments = await dbQuery.all('SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil FROM comentarios c JOIN usuarios u ON c.user_id = u.id WHERE noticia_id = ? ORDER BY fecha DESC', [noticia.id]);
+        res.json({ noticia, valoracion: val, comentarios: comments, user: req.user || null });
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /api/v1/noticias/:slug -> Noticia individual con relacionadas
-app.get('/api/v1/noticias/:slug', (req, res) => {
-    const { slug } = req.params;
-    const noticia = db.prepare('SELECT * FROM noticias WHERE slug = ?').get(slug);
-    if (!noticia) return res.status(404).json({ error: 'Noticia no encontrada' });
-    
-    // Relacionadas: misma fuente o palabras clave del título
-    const palabrasClave = noticia.titulo.split(' ').filter(p => p.length > 4).slice(0, 3);
-    let relacionadas = [];
-    for (const palabra of palabrasClave) {
-        const rows = db.prepare(`SELECT * FROM noticias WHERE titulo LIKE ? AND id != ? LIMIT 2`).all(`%${palabra}%`, noticia.id);
-        rows.forEach(r => { if (!relacionadas.find(x => x.id === r.id)) relacionadas.push(r); });
-    }
-    if (relacionadas.length < 4) {
-        const extra = db.prepare(`SELECT * FROM noticias WHERE fuente = ? AND id != ? LIMIT ?`).all(noticia.fuente, noticia.id, 4 - relacionadas.length);
-        extra.forEach(r => { if (!relacionadas.find(x => x.id === r.id)) relacionadas.push(r); });
-    }
-    
-    // Valoración promedio y comentarios con nombres reales
-    const valoracionRow = db.prepare('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?').get(noticia.id);
-    const comentariosRows = db.prepare(`
-        SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil 
-        FROM comentarios c 
-        JOIN usuarios u ON c.user_id = u.id 
-        WHERE c.noticia_id = ? 
-        ORDER BY c.fecha DESC
-    `).all(noticia.id);
-    
-    res.json({
-        noticia: formatearFront(noticia),
-        relacionadas: relacionadas.slice(0, 4).map(formatearFront),
-        valoracion: { promedio: valoracionRow.promedio || 0, total: valoracionRow.total },
-        comentarios: comentariosRows,
-        user: req.user || null
-    });
+app.post('/api/v1/valorar', async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: 'Login necesario' });
+    try {
+        await dbQuery.run('INSERT INTO valoraciones (noticia_id, user_id, puntos) VALUES (?, ?, ?)', [req.body.noticia_id, req.user.id, req.body.puntos]);
+        const val = await dbQuery.get('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?', [req.body.noticia_id]);
+        res.json({ ok: true, promedio: val.promedio, total: val.total });
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Auth Routes
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/' }), (req, res) => res.redirect('/'));
-app.get('/auth/logout', (req, res) => {
-    req.logout(() => res.redirect('/'));
+app.post('/api/v1/comentar', async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: 'Login necesario' });
+    try {
+        await dbQuery.run('INSERT INTO comentarios (noticia_id, user_id, comentario) VALUES (?, ?, ?)', [req.body.noticia_id, req.user.id, req.body.comentario]);
+        res.json({ ok: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST /api/v1/valorar
-app.post('/api/v1/valorar', (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ error: 'Inicia sesión para valorar' });
-    const { noticia_id, puntos } = req.body;
-    if (!noticia_id || !puntos || puntos < 1 || puntos > 5) return res.status(400).json({ error: 'Datos inválidos' });
-    
-    // Upsert para valoración por usuario
-    const exist = db.prepare('SELECT id FROM valoraciones WHERE noticia_id = ? AND user_id = ?').get(noticia_id, req.user.id);
-    if (exist) {
-        db.prepare('UPDATE valoraciones SET puntos = ? WHERE id = ?').run(parseInt(puntos), exist.id);
-    } else {
-        db.prepare('INSERT INTO valoraciones (noticia_id, user_id, puntos) VALUES (?, ?, ?)').run(noticia_id, req.user.id, parseInt(puntos));
-    }
-
-    const row = db.prepare('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?').get(noticia_id);
-    res.json({ ok: true, promedio: row.promedio, total: row.total });
-});
-
-// POST /api/v1/comentar
-app.post('/api/v1/comentar', (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ error: 'Inicia sesión para comentar' });
-    const { noticia_id, comentario } = req.body;
-    if (!noticia_id || !comentario || comentario.trim().length < 3) return res.status(400).json({ error: 'Comentario inválido' });
-    
-    db.prepare('INSERT INTO comentarios (noticia_id, user_id, comentario) VALUES (?, ?, ?)').run(noticia_id, req.user.id, comentario.trim().slice(0, 1000));
-    res.json({ ok: true, user: req.user });
-});
-
-// ═══════════════════════════════════════
-// Rutas Legacy (Retrocompatibilidad)
-// ═══════════════════════════════════════
-app.get('/api/feed', (req, res) => res.redirect(307, `/api/v1/feed${req.url.includes('?') ? '?' + req.url.split('?')[1] : ''}`));
-app.get('/api/search', (req, res) => res.redirect(307, `/api/v1/search${req.url.includes('?') ? '?' + req.url.split('?')[1] : ''}`));
-
-// Status de usuario
 app.get('/api/v1/user-status', (req, res) => res.json(req.user || {}));
 
-// ═══════════════════════════════════════
-// SSR: Página Individual de Noticia (SEO + Open Graph)
-// ═══════════════════════════════════════
-app.get('/noticias/:slug', (req, res) => {
-    const { slug } = req.params;
-    const noticia = db.prepare('SELECT * FROM noticias WHERE slug = ?').get(slug);
-    
-    if (!noticia) return res.status(404).sendFile(path.join(__dirname, 'public/index.html'));
-    
-    const valoracionRow = db.prepare('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?').get(noticia.id);
-    const promedio = valoracionRow.promedio ? valoracionRow.promedio.toFixed(1) : '0';
-    const totalVotos = valoracionRow.total || 0;
-    const pct = Math.round((parseFloat(promedio) / 5) * 100);
-    let barColor = '#EF4444';
-    if (parseFloat(promedio) >= 4) barColor = '#22C55E';
-    else if (parseFloat(promedio) >= 3) barColor = '#FFCC00';
-    
-    const comentariosRows = db.prepare(`
-        SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil 
-        FROM comentarios c 
-        JOIN usuarios u ON c.user_id = u.id 
-        WHERE c.noticia_id = ? 
-        ORDER BY c.fecha DESC 
-        LIMIT 20
-    `).all(noticia.id);
+// Auth
+app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
+app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/' }), (req, res) => res.redirect('/'));
+app.get('/auth/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
-    const comentariosHTML = comentariosRows.length > 0
-        ? comentariosRows.map(c => `
-            <div class="comentario-item">
-                <div style="display:flex;align-items:center;gap:10px">
-                    <img src="${c.foto_perfil}" style="width:24px;height:24px;border-radius:50%">
-                    <span class="comentario-user">${c.usuario_nombre}</span>
-                    <span class="comentario-fecha">${new Date(c.fecha).toLocaleDateString()}</span>
-                </div>
-                <p>${c.comentario}</p>
-            </div>`).join('')
-        : '<p class="sin-comentarios">Sé el primero en comentar.</p>';
-    
-    const userAuthHTML = req.isAuthenticated() 
-        ? `<div class="comment-form">
-            <textarea id="c-comentario" placeholder="Escribe tu comentario..."></textarea>
-            <button class="btn-comment" onclick="enviarComentario('${noticia.id}')">Publicar comentario</button>
-           </div>`
-        : `<div style="text-align:center;padding:20px;background:#1C1C1E;border-radius:12px">
-            <p style="font-size:14px;color:#9E9E9E;margin-bottom:15px">Inicia sesión para participar en la comunidad</p>
-            <a href="/auth/google" class="btn-primary" style="text-decoration:none;display:inline-block">Login con Google</a>
-           </div>`;
+// SSR Noticia
+app.get('/noticias/:slug', async (req, res) => {
+    try {
+        const noticia = await dbQuery.get('SELECT * FROM noticias WHERE slug = ?', [req.params.slug]);
+        if (!noticia) return res.sendFile(path.join(__dirname, 'public/index.html'));
+        
+        const val = await dbQuery.get('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?', [noticia.id]);
+        const comments = await dbQuery.all('SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil FROM comentarios c JOIN usuarios u ON c.user_id = u.id WHERE noticia_id = ? ORDER BY fecha DESC LIMIT 10', [noticia.id]);
+        
+        const promedio = val.promedio ? parseFloat(val.promedio).toFixed(1) : '0';
+        const pct = Math.round((parseFloat(promedio) / 5) * 100);
+        let barColor = promedio >= 4 ? '#22C55E' : (promedio >= 3 ? '#FFCC00' : '#EF4444');
 
-    const starBtnsHTML = req.isAuthenticated()
-        ? [1,2,3,4,5].map(n => `<button class="star-btn" onclick="votar(${n}, '${noticia.id}')">${n}⭐</button>`).join('')
-        : `<p style="font-size:12px;color:#666;margin-top:10px">Inicia sesión para valorar</p>`;
-    
-    // Relacionadas
-    const relacionadasRows = db.prepare(`SELECT * FROM noticias WHERE fuente = ? AND id != ? LIMIT 4`).all(noticia.fuente, noticia.id);
-    const relacionadasHTML = relacionadasRows.map(r => `
-        <a href="/noticias/${r.slug}" class="rel-card">
-            <img src="${r.imageUrl}" alt="${r.titulo}" onerror="this.src='/img/placeholder-noticia.jpg'">
-            <span>${r.titulo}</span>
-        </a>`).join('');
-    
-    const htmlPage = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>${noticia.titulo} | Intlax</title>
-<meta name="description" content="${(noticia.resumen || '').slice(0, 160)}">
-<meta property="og:title" content="${noticia.titulo}">
-<meta property="og:description" content="${(noticia.resumen || '').slice(0, 200)}">
-<meta property="og:image" content="${noticia.imageUrl}">
-<meta property="og:url" content="https://intlax.com/noticias/${noticia.slug}">
-<meta property="og:type" content="article">
-<meta name="twitter:card" content="summary_large_image">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-<link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
-<style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',sans-serif}
-body{background:#121212;color:#fff;padding-bottom:30px}
-.top-bar{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;position:sticky;top:0;background:#121212;z-index:100;border-bottom:1px solid #222}
-.logo{font-size:22px;font-weight:800;letter-spacing:-0.5px;color:#FFCC00;text-decoration:none}
-.back-btn{background:none;border:none;color:#fff;font-size:26px;cursor:pointer;display:flex;align-items:center}
-.hero-img{width:100%;height:260px;object-fit:cover;display:block}
-.article-body{padding:20px}
-.article-source{color:#FFCC00;font-weight:700;font-size:12px;text-transform:uppercase;margin-bottom:10px}
-.article-title{font-size:22px;font-weight:800;line-height:1.35;margin-bottom:14px}
-.article-date{font-size:12px;color:#9E9E9E;margin-bottom:20px}
-.article-summary{font-size:15px;color:#ccc;line-height:1.65;margin-bottom:24px}
-.btn-primary{background:#FFCC00;color:#121212;border:none;width:100%;padding:15px;border-radius:12px;font-weight:800;font-size:15px;cursor:pointer;margin-bottom:12px;display:block;text-align:center}
-.btn-secondary-link{color:#9E9E9E;text-align:center;font-size:13px;text-decoration:underline;display:block;margin-bottom:28px}
-.section-title{font-size:16px;font-weight:700;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid #333}
-.rating-bar-wrap{background:#2A2A2C;border-radius:12px;padding:16px;margin-bottom:24px}
-.rating-label{font-size:13px;color:#9E9E9E;margin-bottom:10px}
-.rating-bar-bg{background:#333;border-radius:20px;height:12px;overflow:hidden}
-.rating-bar-fill{height:100%;border-radius:20px;transition:width 0.6s ease}
-.rating-score{font-size:24px;font-weight:800;margin-top:8px}
-.rating-total{font-size:12px;color:#9E9E9E;margin-top:2px}
-.star-buttons{display:flex;gap:8px;margin-top:14px}
-.star-btn{flex:1;padding:8px 4px;background:#2A2A2C;border:1px solid #444;border-radius:8px;color:#fff;font-weight:700;cursor:pointer;font-size:13px;transition:all 0.2s}
-.star-btn:hover,.star-btn.selected{background:#FFCC00;color:#121212;border-color:#FFCC00}
-.comments-section{margin-top:24px}
-.comentario-item{background:#1C1C1E;border-radius:10px;padding:14px;margin-bottom:10px}
-.comentario-user{font-weight:700;font-size:13px;color:#FFCC00}
-.comentario-fecha{font-size:11px;color:#666;margin-left:8px}
-.comentario-item p{font-size:14px;color:#ccc;margin-top:8px;line-height:1.5}
-.sin-comentarios{color:#555;font-size:14px;text-align:center;padding:20px 0}
-.comment-form{margin-top:16px}
-.comment-form textarea{width:100%;background:#1C1C1E;border:1px solid #333;color:#fff;border-radius:10px;padding:12px;font-size:14px;margin-bottom:10px;outline:none;height:80px;resize:none}
-.comment-form textarea:focus{border-color:#FFCC00}
-.btn-comment{background:#FFCC00;color:#121212;border:none;border-radius:10px;padding:12px 20px;font-weight:700;cursor:pointer;width:100%}
-.related-section{margin-top:28px}
-.related-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.rel-card{display:block;background:#1C1C1E;border-radius:10px;overflow:hidden;text-decoration:none;color:#fff}
-.rel-card img{width:100%;height:90px;object-fit:cover}
-.rel-card span{display:block;font-size:12px;font-weight:600;padding:8px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.full-modal{position:fixed;inset:0;background:#121212;z-index:2000;display:none;flex-direction:column}
-.full-modal.active{display:flex}
-.modal-top{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid #222}
-#news-iframe{width:100%;flex:1;border:none}
-</style>
-</head>
-<body>
-<header class="top-bar">
-    <a href="/" class="logo">Intlax</a>
-    <button class="back-btn" onclick="history.back()"><i class='bx bx-arrow-back'></i></button>
-</header>
-<img class="hero-img" src="${noticia.imageUrl}" alt="${noticia.titulo}" onerror="this.src='/img/placeholder-noticia.jpg'">
-<div class="article-body">
-    <p class="article-source">${noticia.fuente}</p>
-    <h1 class="article-title">${noticia.titulo}</h1>
-    <p class="article-date">${new Date(noticia.fecha_publicacion).toLocaleDateString()}</p>
-    <p class="article-summary">${noticia.resumen}</p>
-    <button class="btn-primary" onclick="abrirIframe('${noticia.linkOriginal}')">Ver nota completa</button>
-    <div class="rating-bar-wrap">
-        <p class="section-title">Confiabilidad</p>
-        <div class="rating-bar-bg"><div class="rating-bar-fill" id="rating-fill" style="width:${pct}%;background:${barColor}"></div></div>
-        <p class="rating-score" id="rating-score">${promedio}/5</p>
-        <div class="star-buttons">${starBtnsHTML}</div>
-    </div>
-    <div class="related-section"><p class="section-title">Relacionadas</p><div class="related-grid">${relacionadasHTML}</div></div>
-    <div class="comments-section"><p class="section-title">Comunidad</p><div id="comentarios-list">${comentariosHTML}</div>${userAuthHTML}</div>
-</div>
-<script>
-function abrirIframe(url){document.getElementById('news-iframe').src=url;document.getElementById('iframe-modal').classList.add('active');}
-function cerrarIframe(){document.getElementById('iframe-modal').classList.remove('active');document.getElementById('news-iframe').src='';}
-async function votar(puntos, id){try{const r=await fetch('/api/v1/valorar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({noticia_id:id,puntos})});const data=await r.json();if(data.promedio){const p=parseFloat(data.promedio).toFixed(1);document.getElementById('rating-score').textContent=p+'/5';document.getElementById('rating-fill').style.width=(p/5*100)+'%';}}catch(e){}}
-async function enviarComentario(id){const c=document.getElementById('c-comentario').value;if(!c)return;try{const r=await fetch('/api/v1/comentar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({noticia_id:id,comentario:c})});const d=await r.json();if(d.ok){location.reload();}}catch(e){}}
-</script>
-</body>
-</html>`;
+        const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${noticia.titulo} | Intlax</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet"><link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'><style>body{background:#121212;color:#fff;font-family:Inter,sans-serif;margin:0;padding-bottom:50px}.top-bar{padding:15px;border-bottom:1px solid #222;display:flex;justify-content:space-between;align-items:center}.logo{color:#FFCC00;font-weight:800;font-size:20px;text-decoration:none}.hero-img{width:100%;height:250px;object-fit:cover}.content{padding:20px}.title{font-size:24px;margin:15px 0}.source{color:#FFCC00;font-weight:700;font-size:12px;text-transform:uppercase}.summary{line-height:1.6;color:#ccc}.btn-p{background:#FFCC00;color:#121212;padding:15px;border-radius:10px;text-align:center;display:block;text-decoration:none;font-weight:800;margin:20px 0}.rating-box{background:#1C1C1E;padding:15px;border-radius:12px}.bar-bg{background:#333;height:10px;border-radius:5px;overflow:hidden}.bar-fill{height:100%;transition:0.3s}.comment-item{background:#1C1C1E;padding:12px;border-radius:10px;margin-bottom:10px}.user-info{display:flex;align-items:center;gap:10px;margin-bottom:5px}.user-img{width:24px;height:24px;border-radius:50%}</style></head><body><header class="top-bar"><a href="/" class="logo">Intlax</a><button onclick="history.back()" style="background:none;border:none;color:#fff;font-size:24px"><i class='bx bx-arrow-back'></i></button></header><img src="${noticia.imageUrl}" class="hero-img"><div class="content"><p class="source">${noticia.fuente}</p><h1 class="title">${noticia.titulo}</h1><p class="summary">${noticia.resumen}</p><a href="${noticia.linkOriginal}" class="btn-p">VER NOTA COMPLETA</a><div class="rating-box"><h3>Confiabilidad</h3><div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${barColor}"></div></div><p>${promedio}/5 (${val.total || 0} votos)</p></div><div style="margin-top:30px"><h3>Comunidad</h3>${comments.map(c => `<div class="comment-item"><div class="user-info"><img src="${c.foto_perfil}" class="user-img"><b>${c.usuario_nombre}</b></div><p style="margin:0;font-size:14px">${c.comentario}</p></div>`).join('')}${req.isAuthenticated() ? `<div style="margin-top:15px"><textarea id="ctx" style="width:100%;background:#121212;color:#fff;border:1px solid #333;border-radius:8px;padding:10px" placeholder="Escribe un comentario..."></textarea><button onclick="postC()" style="width:100%;background:#FFCC00;border:none;padding:10px;margin-top:5px;border-radius:8px;font-weight:700">Publicar</button></div>` : `<a href="/auth/google" class="btn-p" style="font-size:14px;padding:10px">Inicia sesión para comentar</a>`}</div></div><script>async function postC(){const c=document.getElementById('ctx').value;if(!c)return;const r=await fetch('/api/v1/comentar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({noticia_id:'${noticia.id}',comentario:c})});if(r.ok)location.reload();}</script></body></html>`;
+        res.send(html);
+    } catch (err) { res.sendFile(path.join(__dirname, 'public/index.html')); }
 });
 
-// ═══════════════════════════════════════
-// SPA Catch-All (Rutas del Frontend)
-// ═══════════════════════════════════════
-// Sirve index.html para /explorar, /comunidad, /reportar y cualquier ruta no-API
-app.get(/^(?!\/api|\/noticias\/).*$/, (req, res) => {
-    res.sendFile(path.join(__dirname, 'public/index.html'));
-});
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
 
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor de Intlax corriendo en el puerto ${PORT}`);
-    
-    // Ejecutar extracción inicial con un pequeño delay para asegurar estabilidad del puerto
-    setTimeout(() => {
-        fetchAllRssFeeds().catch(err => console.error("Error en extracción inicial:", err));
-    }, 1000);
+    console.log(`🚀 Intlax escuchando en puerto ${PORT}`);
+    setTimeout(fetchAllRssFeeds, 1000);
 });
