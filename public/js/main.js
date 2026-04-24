@@ -6,14 +6,104 @@ document.addEventListener('DOMContentLoaded', () => {
     checkLocationPermission();
     setupBottomNav();
     checkUserSession();
+    handleRouting(); // Nueva función de routing
 });
+
+// Router Inteligente para detectar si estamos en una noticia
+async function handleRouting() {
+    const path = window.location.pathname;
+    if (path.startsWith('/noticias/')) {
+        const slug = path.split('/').pop();
+        if (slug) {
+            console.log('🤖 Router: Detectada página de noticia para slug:', slug);
+            loadArticleBySlug(slug);
+        }
+    }
+}
+
+async function loadArticleBySlug(slug) {
+    try {
+        const res = await fetch('/api/v1/feed');
+        const data = await res.json();
+        const allArticles = [data.noticiaPrincipal, ...data.noticiasSecundarias];
+        const article = allArticles.find(a => a.slug === slug);
+        
+        if (article) {
+            console.log('✅ Noticia encontrada por el router, inyectando vista...');
+            renderArticleDetail(article);
+        } else {
+            console.error('❌ Noticia no encontrada en el feed actual');
+        }
+    } catch (e) { console.error('Error en routing:', e); }
+}
+
+function renderArticleDetail(noticia) {
+    document.body.style.overflow = 'auto';
+    const mainContainer = document.querySelector('main') || document.body;
+    
+    const pct = Math.round((noticia.puntuacion || 3) / 5 * 100);
+    const barCol = (noticia.puntuacion || 3) >= 4 ? '#22C55E' : '#FFCC00';
+
+    mainContainer.innerHTML = `
+        <div class="news-page-container" style="background:var(--bg); min-height:100vh; position:fixed; top:0; left:0; width:100%; z-index:9999; overflow-y:auto; padding-bottom:100px;">
+            <nav style="padding:15px; background:rgba(18,18,18,0.9); backdrop-filter:blur(10px); position:sticky; top:0; border-bottom:1px solid #333; display:flex; align-items:center; gap:15px;">
+                <a href="/" style="color:#fff; font-size:28px; text-decoration:none;"><i class='bx bx-chevron-left'></i></a>
+                <span style="font-weight:800;">Noticia</span>
+            </nav>
+            <img src="${noticia.imageUrl}" style="width:100%; height:280px; object-fit:cover;" onerror="this.src='/img/placeholder-noticia.jpg'">
+            <div style="padding:20px;">
+                <span style="color:var(--accent); font-weight:800; font-size:11px; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; display:block;">${noticia.source}</span>
+                <h1 style="font-size:24px; font-weight:800; margin-bottom:15px; line-height:1.25;">${noticia.title}</h1>
+                <p style="color:var(--text-sec); font-size:16px; margin-bottom:25px;">${noticia.summary}</p>
+                <a href="${noticia.link}" class="btn-primary" style="display:block; text-align:center; text-decoration:none; margin-bottom:30px;">VER NOTA COMPLETA</a>
+
+                <div class="card" style="margin-bottom:20px;">
+                    <h3 style="font-size:18px; font-weight:800; margin-bottom:15px;"><i class='bx bxs-check-shield' style="color:var(--accent)"></i> Confiabilidad</h3>
+                    <div style="height:12px; background:#333; border-radius:6px; overflow:hidden; margin-bottom:10px;">
+                        <div style="width:${pct}%; height:100%; background:${barCol};"></div>
+                    </div>
+                    <p style="font-size:13px; color:var(--text-sec);">${noticia.puntuacion || 3} de 5 Estrellas comunitarias</p>
+                </div>
+
+                <div class="card">
+                    <h3 style="font-size:18px; font-weight:800; margin-bottom:15px;"><i class='bx bxs-group' style="color:var(--accent)"></i> Comunidad</h3>
+                    <div id="comments-router-box">
+                        <p style="color:#666; font-size:14px; text-align:center; padding:10px;">Cargando comentarios...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    fetchCommentsForRouter(noticia.id);
+}
+
+async function fetchCommentsForRouter(noticiaId) {
+    try {
+        const res = await fetch('/api/v1/comentarios?noticia_id=' + noticiaId);
+        const comments = await res.json();
+        const box = document.getElementById('comments-router-box');
+        if (box && comments && comments.length) {
+            let html = '';
+            comments.forEach(c => {
+                html += `
+                    <div style="background:#252527; padding:12px; border-radius:12px; margin-bottom:12px; border-left:3px solid var(--accent);">
+                        <div style="display:flex; align-items:center; gap:8px; font-weight:700; font-size:13px; margin-bottom:4px;">
+                            <img src="${c.foto_perfil}" style="width:22px; height:22px; border-radius:50%;">
+                            <span>${c.usuario_nombre}</span>
+                        </div>
+                        <p style="font-size:14px; color:#ddd; margin:0;">${c.comentario}</p>
+                    </div>
+                `;
+            });
+            box.innerHTML = html;
+        } else if(box) {
+            box.innerHTML = '<p style="color:#666; font-size:14px; text-align:center; padding:10px;">¡Sé el primero en comentar!</p>';
+        }
+    } catch (e) { console.error('Error cargando comentarios routing:', e); }
+}
 
 async function checkUserSession() {
     try {
-        const res = await fetch('/api/v1/feed'); // Usamos el feed para ver si viene el campo 'user', o crear un endpoint dedicado
-        // Refinamos: el endpoint /api/v1/feed no devuelve user por defecto en el JSON actual. 
-        // Creamos un fetch rápido a un endpoint que sí lo tenga o verificamos el estado.
-        // Dado que modifiqué las respuestas de noticias, voy a usar un endpoint que siempre tenga el user
         const response = await fetch('/api/v1/user-status');
         const user = await response.json();
         const container = document.getElementById('user-auth-container');
@@ -30,14 +120,12 @@ function checkLocationPermission() {
     if (locPref === 'granted') {
         getLocationAndFetch();
     } else if (locPref === 'denied') {
-        fetchNews(); // Fetch sin params (Mayor vistas)
+        fetchNews(); 
     } else {
-        // Mostrar modal pidiendo permiso
         document.getElementById('location-modal-overlay').classList.remove('hidden');
     }
 }
 
-// Location Modal Buttons
 document.getElementById('btn-allow-loc').addEventListener('click', () => {
     document.getElementById('location-modal-overlay').classList.add('hidden');
     localStorage.setItem('intlax_loc_pref', 'granted');
@@ -52,68 +140,47 @@ document.getElementById('btn-deny-loc').addEventListener('click', () => {
 
 function getLocationAndFetch() {
     if (navigator.geolocation && !currentGeoPolled) {
-        currentGeoPolled = true; // prevent loop locks
+        currentGeoPolled = true; 
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const lat = position.coords.latitude;
                 const lng = position.coords.longitude;
-                fetchNews(`?lat=${lat}&lng=${lng}`);
+                fetchNews('?lat=' + lat + '&lng=' + lng);
             },
-            (err) => {
-                console.warn('Geolocation Error', err);
-                fetchNews(); // Fallback si falla
-            }
+            () => fetchNews()
         );
     } else {
         fetchNews();
     }
 }
 
-async function fetchNews(queryParams = '') {
+async function fetchNews(params = '') {
     try {
-        const response = await fetch(`/api/v1/feed${queryParams}`);
+        const response = await fetch('/api/v1/feed' + params);
+        if (!response.ok) throw new Error('Error en el servidor');
         const data = await response.json();
         
-        if (data.noticiaPrincipal || data.noticiasSecundarias) {
-            // Guardamos local para los modales
-            globalArticles = [];
-            if(data.noticiaPrincipal) globalArticles.push(data.noticiaPrincipal);
-            if(data.noticiasSecundarias) globalArticles.push(...data.noticiasSecundarias);
-            
-            if(data.noticiaPrincipal){
-                renderHero(data.noticiaPrincipal);
-            } else {
-                document.getElementById('hero-container').innerHTML = '';
-            }
-            renderFeed(data.noticiasSecundarias || []);
-            
-            attachClickBindings();
-        }
-    } catch (error) {
-        console.error('Error fetching news:', error);
-        document.getElementById('hero-container').innerHTML = '<p style="padding:20px;">Error cargando feed RSS.</p>';
+        globalArticles = [data.noticiaPrincipal, ...data.noticiasSecundarias];
+        renderHero(data.noticiaPrincipal);
+        renderFeed(data.noticiasSecundarias);
+        attachClickBindings();
+    } catch (err) {
+        console.error('Error cargando noticias:', err);
     }
 }
 
 function renderHero(noticia) {
-    const heroHTML = `
-        <article class="hero-card" data-id="${noticia.id}">
-            <div class="hero-img-wrapper">
-                <img src="${noticia.imageUrl}" alt="${noticia.source}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
-                <div class="hero-gradient">
-                    <h2 class="hero-title">${noticia.title}</h2>
-                    <div class="hero-meta">
-                        <span class="tag">${noticia.category}</span>
-                        <span>•</span>
-                        <span>${noticia.time}</span>
-                        <span>•</span>
-                        <span>${(noticia.views/1000).toFixed(1)}K vistas</span>
-                    </div>
-                </div>
+    if(!noticia) return;
+    const heroContainer = document.getElementById('hero-container');
+    heroContainer.innerHTML = `
+        <div class="hero-card" data-id="${noticia.id}">
+            <img class="hero-img" src="${noticia.imageUrl}" alt="${noticia.title}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
+            <div class="hero-overlay">
+                <span class="category-badge">${noticia.source}</span>
+                <h2 class="hero-title">${noticia.title}</h2>
             </div>
-        </article>
+        </div>
     `;
-    document.getElementById('hero-container').innerHTML = heroHTML;
 }
 
 function renderFeed(noticias) {
@@ -144,151 +211,65 @@ function renderFeed(noticias) {
     feedContainer.innerHTML = feedHTML;
 }
 
-// Modals Logic
-let activeArticleLink = '';
-
 function attachClickBindings() {
-    // Vincular solo las activas en pantalla general
     const cards = document.querySelectorAll('#hero-container .hero-card, #feed-container .news-card');
     cards.forEach(card => {
-        // Remover listener previo clonando (precaución)
-        const old_card = card;
-        const new_card = old_card.cloneNode(true);
-        old_card.parentNode.replaceChild(new_card, old_card);
-        
-        new_card.addEventListener('click', () => {
-            const id = new_card.getAttribute('data-id');
+        card.addEventListener('click', () => {
+            const id = card.getAttribute('data-id');
             const article = globalArticles.find(a => a.id === id);
             if(article && article.slug) {
-                window.location.href = `/noticias/${article.slug}`;
+                window.location.href = '/noticias/' + article.slug;
             }
         });
     });
 }
 
-function openSummaryModal(article) {
-    // Actualizar URL del navegador con el slug (Deep Link + History API)
-    if (article.slug) {
-        window.history.pushState({ articleId: article.id }, '', `/noticias/${article.slug}`);
-    }
-    
-    const summaryImg = document.getElementById('summary-img');
-    summaryImg.src = article.imageUrl;
-    summaryImg.onerror = function() {
-        this.onerror = null;
-        this.src = '/img/placeholder-noticia.jpg';
-    };
-    
-    document.getElementById('summary-source').textContent = article.source;
-    document.getElementById('summary-title').textContent = article.title;
-    document.getElementById('summary-desc').textContent = article.summary;
-    activeArticleLink = article.link;
-    document.getElementById('btn-open-external').href = article.link;
-    
-    // Switch Views
-    document.getElementById('article-summary-modal').classList.remove('hidden');
-}
-
-// Botones dentro de los modales
-document.getElementById('close-summary-btn').addEventListener('click', () => {
-    document.getElementById('article-summary-modal').classList.add('hidden');
-});
-
-document.getElementById('btn-read-full').addEventListener('click', () => {
-    // Abrir iframe y esconder resumen
-    document.getElementById('article-summary-modal').classList.add('hidden');
-    document.getElementById('news-iframe').src = activeArticleLink;
-    document.getElementById('iframe-modal').classList.remove('hidden');
-});
-
-document.getElementById('close-iframe-btn').addEventListener('click', () => {
-    // Cerrar iframe
-    document.getElementById('iframe-modal').classList.add('hidden');
-    document.getElementById('news-iframe').src = ""; // Stop loading or video
-});
-
-// ----------------------------------------------------
-// NAVEGACIÓN BOTTOM Y MÓDULO DE BÚSQUEDA
-// ----------------------------------------------------
 function setupBottomNav() {
-    const bottomNavItems = document.querySelectorAll('.bottom-nav-item');
-    const heroContainer = document.getElementById('hero-container');
-    const feedContainer = document.getElementById('feed-container');
-    const vistaBusqueda = document.getElementById('vista-busqueda');
+    const homeBtn = document.getElementById('nav-home');
+    const searchBtn = document.getElementById('nav-search');
+    const feedView = document.getElementById('feed-view');
+    const searchView = document.getElementById('search-view');
 
-    // Botón Inicio (0)
-    bottomNavItems[0].addEventListener('click', () => {
-        bottomNavItems.forEach(i => i.classList.remove('active'));
-        bottomNavItems[0].classList.add('active');
-        heroContainer.classList.remove('hidden');
-        feedContainer.classList.remove('hidden');
-        vistaBusqueda.classList.add('hidden');
+    homeBtn.addEventListener('click', () => {
+        feedView.classList.remove('hidden');
+        searchView.classList.add('hidden');
+        homeBtn.classList.add('active');
+        searchBtn.classList.remove('active');
     });
 
-    // Botón Buscar (1)
-    bottomNavItems[1].addEventListener('click', () => {
-        bottomNavItems.forEach(i => i.classList.remove('active'));
-        bottomNavItems[1].classList.add('active');
-        heroContainer.classList.add('hidden');
-        feedContainer.classList.add('hidden');
-        vistaBusqueda.classList.remove('hidden');
-        document.getElementById('input-busqueda').focus();
+    searchBtn.addEventListener('click', () => {
+        searchView.classList.remove('hidden');
+        feedView.classList.add('hidden');
+        searchBtn.classList.add('active');
+        homeBtn.classList.remove('active');
+    });
+
+    const inputBusqueda = document.getElementById('input-busqueda');
+    inputBusqueda.addEventListener('input', (e) => {
+        const term = e.target.value;
+        if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
+        searchDebounceTimeout = setTimeout(() => {
+            executeSearch(term);
+        }, 300);
     });
 }
-
-// Escuchar Input para Debounce
-document.getElementById('input-busqueda').addEventListener('input', (e) => {
-    const term = e.target.value.trim();
-    clearTimeout(searchDebounceTimeout);
-    
-    const resultadosContainer = document.getElementById('contenedor-resultados-busqueda');
-    const emptyStateHTML = `
-        <div id="empty-state-search" class="empty-state">
-            <i class='bx bx-search-alt-2'></i>
-            <p>No se encontraron resultados para tu búsqueda.</p>
-        </div>
-    `;
-
-    if (term === '') {
-        document.getElementById('contenedor-terminos').innerHTML = '';
-        resultadosContainer.innerHTML = emptyStateHTML;
-        return;
-    }
-
-    searchDebounceTimeout = setTimeout(() => {
-        executeSearch(term);
-    }, 300);
-});
 
 async function executeSearch(term) {
+    if (term.length < 2) return;
     try {
-        const response = await fetch(`/api/v1/search?q=${encodeURIComponent(term)}`);
-        const data = await response.json();
-        renderSearch(data.resultados, data.relacionados);
+        const res = await fetch('/api/v1/search?q=' + encodeURIComponent(term));
+        const data = await res.json();
+        renderSearchResults(data.resultados);
     } catch (e) {
         console.error('Error en búsqueda:', e);
     }
 }
 
-function renderSearch(resultados, relacionados) {
-    const terminosContainer = document.getElementById('contenedor-terminos');
+function renderSearchResults(resultados) {
     const resultadosContainer = document.getElementById('contenedor-resultados-busqueda');
+    let feedHTML = '';
     
-    // Interfaz Chips
-    if (relacionados && relacionados.length > 0) {
-        terminosContainer.innerHTML = relacionados.map(r => `<div class="chip" onclick="fillSearch('${r}')">${r}</div>`).join('');
-    } else {
-        terminosContainer.innerHTML = '';
-    }
-
-    // Interfaz Resultados
     if (resultados && resultados.length > 0) {
-        // Acoplar al array global sin duplicar
-        resultados.forEach(r => {
-            if(!globalArticles.find(a => a.id === r.id)) globalArticles.push(r);
-        });
-
-        let feedHTML = '';
         resultados.forEach(noticia => {
             feedHTML += `
                 <article class="news-card" data-id="${noticia.id}">
@@ -312,14 +293,14 @@ function renderSearch(resultados, relacionados) {
         
         resultadosContainer.innerHTML = feedHTML;
         
-        // Agregar click listener al DOM inyectado para búsqueda
         const searchCards = document.querySelectorAll('#contenedor-resultados-busqueda .news-card');
         searchCards.forEach(card => {
             card.addEventListener('click', () => {
                 const id = card.getAttribute('data-id');
-                const article = globalArticles.find(a => a.id === id);
+                // Para búsqueda, necesitamos que globalArticles tenga los resultados o buscarlos
+                const article = resultados.find(a => a.id === id);
                 if(article && article.slug) {
-                    window.location.href = `/noticias/${article.slug}`;
+                    window.location.href = '/noticias/' + article.slug;
                 }
             });
         });
@@ -334,7 +315,6 @@ function renderSearch(resultados, relacionados) {
     }
 }
 
-// Inyección programática si tocan un chip
 window.fillSearch = function(term) {
     const input = document.getElementById('input-busqueda');
     input.value = term;

@@ -317,6 +317,13 @@ app.post('/api/v1/comentar', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.get('/api/v1/comentarios', async (req, res) => {
+    try {
+        const rows = await dbQuery.all('SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil FROM comentarios c JOIN usuarios u ON c.user_id = u.id WHERE noticia_id = ? ORDER BY fecha DESC', [req.query.noticia_id]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/v1/user-status', (req, res) => res.json(req.user || {}));
 
 // Auth
