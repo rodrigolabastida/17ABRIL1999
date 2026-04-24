@@ -288,6 +288,47 @@ app.get('/api/feed', (req, res) => {
     });
 });
 
+// GET /api/search -> Buscador semántico en tiempo real
+app.get('/api/search', (req, res) => {
+    const query = (req.query.q || '').toLowerCase().trim();
+    if (!query) {
+        return res.json({ resultados: [], relacionados: [] });
+    }
+
+    // Filtramos buscando en titulo y resumen
+    const resultados = globalArticlesCache.filter(a => {
+        const titleMatch = a.title && a.title.toLowerCase().includes(query);
+        const summaryMatch = a.summary && a.summary.toLowerCase().includes(query);
+        return titleMatch || summaryMatch;
+    });
+
+    // Minería de Términos Relacionados (Top 5 palabras más repetidas)
+    let relacionados = [];
+    if (resultados.length > 0) {
+        const textCorpus = resultados.map(r => (r.title || '') + ' ' + (r.summary || '')).join(' ').toLowerCase();
+        const words = textCorpus.match(/\b[a-záéíóúñ]+\b/gi) || [];
+        
+        // Stopwords básicas para español que pudieran escapar del filtro de 5 letras
+        const stopWords = ['noticia', 'tlaxcala', 'donde', 'desde', 'sobre', 'hasta', 'cuando', 'quien', 'porque', 'tiene', 'estado', 'municipio', 'gobierno'];
+        
+        const frequency = {};
+        words.forEach(w => {
+            // Ignorar palabras menores a 5 letras, stopwords, y la misma palabra de busqueda
+            if (w.length > 5 && !stopWords.includes(w) && !w.includes(query) && !query.includes(w)) {
+                frequency[w] = (frequency[w] || 0) + 1;
+            }
+        });
+
+        const sortedWords = Object.keys(frequency).sort((a, b) => frequency[b] - frequency[a]);
+        relacionados = sortedWords.slice(0, 5);
+    }
+
+    res.json({
+        resultados: resultados,
+        relacionados: relacionados
+    });
+});
+
 app.listen(PORT, () => {
     console.log(`🚀 Servidor de Intlax corriendo en el puerto ${PORT}`);
 });

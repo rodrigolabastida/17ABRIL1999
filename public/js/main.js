@@ -1,8 +1,10 @@
 let globalArticles = []; // Para acceder a ellos rápido al hacer click
 let currentGeoPolled = false;
+let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     checkLocationPermission();
+    setupBottomNav();
 });
 
 function checkLocationPermission() {
@@ -128,10 +130,16 @@ function renderFeed(noticias) {
 let activeArticleLink = '';
 
 function attachClickBindings() {
-    const cards = document.querySelectorAll('.hero-card, .news-card');
+    // Vincular solo las activas en pantalla general
+    const cards = document.querySelectorAll('#hero-container .hero-card, #feed-container .news-card');
     cards.forEach(card => {
-        card.addEventListener('click', () => {
-            const id = card.getAttribute('data-id');
+        // Remover listener previo clonando (precaución)
+        const old_card = card;
+        const new_card = old_card.cloneNode(true);
+        old_card.parentNode.replaceChild(new_card, old_card);
+        
+        new_card.addEventListener('click', () => {
+            const id = new_card.getAttribute('data-id');
             const article = globalArticles.find(a => a.id === id);
             if(article) openSummaryModal(article);
         });
@@ -173,3 +181,131 @@ document.getElementById('close-iframe-btn').addEventListener('click', () => {
     document.getElementById('iframe-modal').classList.add('hidden');
     document.getElementById('news-iframe').src = ""; // Stop loading or video
 });
+
+// ----------------------------------------------------
+// NAVEGACIÓN BOTTOM Y MÓDULO DE BÚSQUEDA
+// ----------------------------------------------------
+function setupBottomNav() {
+    const bottomNavItems = document.querySelectorAll('.bottom-nav-item');
+    const heroContainer = document.getElementById('hero-container');
+    const feedContainer = document.getElementById('feed-container');
+    const vistaBusqueda = document.getElementById('vista-busqueda');
+
+    // Botón Inicio (0)
+    bottomNavItems[0].addEventListener('click', () => {
+        bottomNavItems.forEach(i => i.classList.remove('active'));
+        bottomNavItems[0].classList.add('active');
+        heroContainer.classList.remove('hidden');
+        feedContainer.classList.remove('hidden');
+        vistaBusqueda.classList.add('hidden');
+    });
+
+    // Botón Buscar (1)
+    bottomNavItems[1].addEventListener('click', () => {
+        bottomNavItems.forEach(i => i.classList.remove('active'));
+        bottomNavItems[1].classList.add('active');
+        heroContainer.classList.add('hidden');
+        feedContainer.classList.add('hidden');
+        vistaBusqueda.classList.remove('hidden');
+        document.getElementById('input-busqueda').focus();
+    });
+}
+
+// Escuchar Input para Debounce
+document.getElementById('input-busqueda').addEventListener('input', (e) => {
+    const term = e.target.value.trim();
+    clearTimeout(searchDebounceTimeout);
+    
+    if (term === '') {
+        document.getElementById('contenedor-terminos').innerHTML = '';
+        const emptyState = document.getElementById('empty-state-search');
+        const resultadosContainer = document.getElementById('contenedor-resultados-busqueda');
+        resultadosContainer.innerHTML = '';
+        resultadosContainer.appendChild(emptyState);
+        emptyState.classList.remove('hidden');
+        return;
+    }
+
+    searchDebounceTimeout = setTimeout(() => {
+        executeSearch(term);
+    }, 300);
+});
+
+async function executeSearch(term) {
+    try {
+        const response = await fetch(`/api/search?q=${encodeURIComponent(term)}`);
+        const data = await response.json();
+        renderSearch(data.resultados, data.relacionados);
+    } catch (e) {
+        console.error('Error en búsqueda:', e);
+    }
+}
+
+function renderSearch(resultados, relacionados) {
+    const terminosContainer = document.getElementById('contenedor-terminos');
+    const resultadosContainer = document.getElementById('contenedor-resultados-busqueda');
+    const emptyState = document.getElementById('empty-state-search');
+    
+    // Interfaz Chips
+    if (relacionados && relacionados.length > 0) {
+        terminosContainer.innerHTML = relacionados.map(r => `<div class="chip" onclick="fillSearch('${r}')">${r}</div>`).join('');
+    } else {
+        terminosContainer.innerHTML = '';
+    }
+
+    // Interfaz Resultados
+    if (resultados && resultados.length > 0) {
+        emptyState.classList.add('hidden');
+        
+        // Acoplar al array global sin duplicar
+        resultados.forEach(r => {
+            if(!globalArticles.find(a => a.id === r.id)) globalArticles.push(r);
+        });
+
+        let feedHTML = '';
+        resultados.forEach(noticia => {
+            feedHTML += `
+                <article class="news-card" data-id="${noticia.id}">
+                    <img class="news-thumb" src="${noticia.imageUrl}" alt="${noticia.source}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
+                    <div class="news-info">
+                        <h3 class="news-title">${noticia.title}</h3>
+                        <div class="news-bottom">
+                            <div class="news-meta">
+                                <span>${noticia.category}</span>
+                                <span>• ${(noticia.views/1000).toFixed(1)}K vistas</span>
+                            </div>
+                            <div class="news-actions">
+                                <i class='bx bx-message-rounded'></i>
+                                <i class='bx bx-share-alt' ></i>
+                            </div>
+                        </div>
+                    </div>
+                </article>
+            `;
+        });
+        
+        resultadosContainer.innerHTML = feedHTML;
+        
+        // Agregar click listener al DOM inyectado para búsqueda
+        const searchCards = document.querySelectorAll('#contenedor-resultados-busqueda .news-card');
+        searchCards.forEach(card => {
+            card.addEventListener('click', () => {
+                const id = card.getAttribute('data-id');
+                const article = globalArticles.find(a => a.id === id);
+                if(article) openSummaryModal(article);
+            });
+        });
+
+    } else {
+        resultadosContainer.innerHTML = '';
+        resultadosContainer.appendChild(emptyState);
+        emptyState.classList.remove('hidden');
+    }
+}
+
+// Inyección programática si tocan un chip
+window.fillSearch = function(term) {
+    const input = document.getElementById('input-busqueda');
+    input.value = term;
+    executeSearch(term);
+};

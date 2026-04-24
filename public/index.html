@@ -47,6 +47,25 @@
         <div id="feed-container" class="feed-list">
             <!-- Inyectado dinámicamente por JS -->
         </div>
+
+        <!-- Vista de Búsqueda (Oculta por defecto) -->
+        <section id="vista-busqueda" class="hidden">
+            <div class="search-header">
+                <input type="search" id="input-busqueda" placeholder="Buscar noticias, accidentes o reportes..." autocomplete="off">
+            </div>
+            
+            <div id="contenedor-terminos" class="chips-container">
+                <!-- Chips inyectados por JS -->
+            </div>
+
+            <div id="contenedor-resultados-busqueda" class="feed-list">
+                <!-- Resultados inyectados por JS -->
+                <div id="empty-state-search" class="empty-state hidden">
+                    <i class='bx bx-search-alt-2'></i>
+                    <p>No se encontraron resultados para tu búsqueda.</p>
+                </div>
+            </div>
+        </section>
     </main>
 
     <!-- Bottom Nav -->
