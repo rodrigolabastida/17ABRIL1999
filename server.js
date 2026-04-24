@@ -40,7 +40,7 @@ const parser = new Parser({
 const PORT = process.env.PORT || 3000;
 
 // Inicialización de SQLite (Asíncrono para máxima compatibilidad)
-const db = new sqlite3.Database('intlax.db', (err) => {
+const db = new sqlite3.Database(path.join(__dirname, 'intlax.db'), (err) => {
     if (err) console.error('❌ Error al abrir base de datos:', err.message);
     else console.log('✅ Base de datos SQLite conectada.');
 });
