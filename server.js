@@ -143,14 +143,15 @@ passport.deserializeUser(async (id, done) => {
 
 // Función generadora de Slug SEO
 function generarSlug(texto) {
-    return (texto || "")
+    if (!texto) return Math.random().toString(36).substr(2, 9);
+    return texto
         .toLowerCase()
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .replace(/[^a-z0-9\s-]/g, "")
         .trim()
         .replace(/\s+/g, "-")
-        .slice(0, 80) + '-' + Math.random().toString(36).substr(2, 5);
+        .slice(0, 90);
 }
 
 // Fuentes RSS

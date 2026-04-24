@@ -2,12 +2,21 @@ let globalArticles = []; // Para acceder a ellos rápido al hacer click
 let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('🚀 Intlax v7.0 Activo - Modo Router Híbrido');
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🚀 Intlax v8.1 Activo - Modo Router Híbrido');
+    
+    // El Router toma el control total si estamos en una noticia
+    const isArticle = await handleRouting();
+    if (isArticle) {
+        console.log('⏹️ Modo Artículo: Deteniendo carga de feed principal.');
+        checkUserSession(); // Solo cargamos sesión para comentarios
+        return; 
+    }
+
+    // Si no es artículo, flujo normal de portada
     checkLocationPermission();
     setupBottomNav();
     checkUserSession();
-    handleRouting(); // Nueva función de routing
 });
 
 // Router Inteligente para detectar si estamos en una noticia
@@ -17,9 +26,11 @@ async function handleRouting() {
         const slug = path.split('/').pop();
         if (slug) {
             console.log('🤖 Router: Detectada página de noticia para slug:', slug);
-            loadArticleBySlug(slug);
+            await loadArticleBySlug(slug);
+            return true;
         }
     }
+    return false;
 }
 
 async function loadArticleBySlug(slug) {
