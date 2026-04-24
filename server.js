@@ -324,6 +324,7 @@ app.get('/auth/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 // SSR Noticia
 app.get('/noticias/:slug', async (req, res) => {
     try {
+        console.log(`📖 Sirviendo página dedicada para: ${req.params.slug}`);
         const noticia = await dbQuery.get('SELECT * FROM noticias WHERE slug = ?', [req.params.slug]);
         if (!noticia) return res.sendFile(path.join(__dirname, 'public/index.html'));
         
