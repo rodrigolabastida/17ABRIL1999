@@ -73,6 +73,46 @@
         </div>
     </nav>
 
+    <!-- Modal Geolocation -->
+    <div id="location-modal-overlay" class="modal-overlay hidden">
+        <div class="location-modal">
+            <h3>📍 Mejoramos tu experiencia</h3>
+            <p>Para mostrarte las noticias más relevantes que ocurren cerca de ti, necesitamos tu ubicación.</p>
+            <div class="modal-buttons">
+                <button id="btn-deny-loc" class="btn-secondary">Ahora no</button>
+                <button id="btn-allow-loc" class="btn-primary">Permitir</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Resumen In-App -->
+    <div id="article-summary-modal" class="full-modal hidden">
+        <div class="summary-top-bar">
+            <h1 class="logo">Intlax</h1>
+            <button class="close-modal-btn" id="close-summary-btn"><i class='bx bx-x'></i></button>
+        </div>
+        <div class="summary-content">
+            <img id="summary-img" src="" alt="Noticia">
+            <p class="summary-source" id="summary-source"></p>
+            <h2 id="summary-title"></h2>
+            <p id="summary-desc" class="summary-description"></p>
+            <button id="btn-read-full" class="btn-primary-large">Ver nota completa</button>
+            <!-- Plan de contingencia ante bloqueos X-Frame-Options -->
+            <a id="btn-open-external" href="#" target="_blank" class="btn-secondary-link">Abrir en Safari/Chrome (Sino carga)</a>
+        </div>
+    </div>
+
+    <!-- Modal Iframe In-App -->
+    <div id="iframe-modal" class="full-modal hidden">
+        <div class="summary-top-bar">
+            <h1 class="logo">Intlax</h1>
+            <button class="close-modal-btn" id="close-iframe-btn"><i class='bx bx-arrow-back'></i></button>
+        </div>
+        <div class="iframe-container">
+            <iframe id="news-iframe" src="" frameborder="0" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe>
+        </div>
+    </div>
+
     <script src="/js/main.js"></script>
 </body>
 </html>
