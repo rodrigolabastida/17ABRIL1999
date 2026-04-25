@@ -303,13 +303,26 @@ function formatearFront(row) {
     };
 }
 
-// API v1
+// API v1 con Caché en Memoria para velocidad extrema
+let cacheFeed = null;
+let lastCacheTime = 0;
+
 app.get('/api/v1/feed', async (req, res) => {
     try {
-        const rows = await dbQuery.all(`SELECT * FROM noticias ORDER BY (fecha_captura >= datetime('now', '-24 hours')) DESC, puntuacion DESC LIMIT 31`);
+        const ahora = Date.now();
+        // Si hay caché y tiene menos de 5 minutos, respondemos al instante
+        if (cacheFeed && (ahora - lastCacheTime < 300000)) {
+            return res.json(cacheFeed);
+        }
+
+        const rows = await dbQuery.all(`SELECT * FROM noticias ORDER BY fecha_captura DESC LIMIT 31`);
         if (!rows.length) return res.json({ noticiaPrincipal: null, noticiasSecundarias: [] });
+        
         const articles = rows.map(formatearFront);
-        res.json({ noticiaPrincipal: articles[0], noticiasSecundarias: articles.slice(1) });
+        cacheFeed = { noticiaPrincipal: articles[0], noticiasSecundarias: articles.slice(1) };
+        lastCacheTime = ahora;
+        
+        res.json(cacheFeed);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -537,7 +550,7 @@ app.get('/noticias/:slug', async (req, res) => {
             if(r.ok){
                 const data = await r.json();
                 document.getElementById('battery-rating').setAttribute('data-value', Math.round(data.promedio));
-                document.getElementById('battery-status').innerText = `${parseFloat(data.promedio).toFixed(1)} de 5 Estrellas (${data.total} votos)`;
+                document.getElementById('battery-status').innerText = parseFloat(data.promedio).toFixed(1) + ' de 5 Estrellas (' + data.total + ' votos)';
                 alert('¡Voto registrado!');
             } else {
                 const err = await r.json();

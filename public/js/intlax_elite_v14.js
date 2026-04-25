@@ -17,7 +17,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     checkLocationPermission();
     setupBottomNav();
     checkUserSession();
-    setupDragScroll(); // <--- Nueva función de arrastre
+    setupDragScroll();
+
+    // Timeout de seguridad: Si en 4s no cargan las noticias, forzamos la entrada
+    setTimeout(() => {
+        const preloader = document.getElementById('preloader');
+        if (preloader && !preloader.classList.contains('preloader-hidden')) {
+            console.log('⏱️ Timeout del preloader alcanzado. Forzando entrada.');
+            preloader.classList.add('preloader-hidden');
+        }
+    }, 4000); 
 });
 
 function setupDragScroll() {
