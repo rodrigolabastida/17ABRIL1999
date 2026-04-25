@@ -314,7 +314,7 @@ app.get('/api/v1/noticias/:slug', async (req, res) => {
         const noticia = await dbQuery.get('SELECT * FROM noticias WHERE slug = ?', [req.params.slug]);
         if (!noticia) {
             console.log(`⚠️ Noticia no encontrada en DB para slug: ${req.params.slug}. Rebotando a index.`);
-            return res.sendFile(path.join(__dirname, 'public/index.html'));
+            return res.sendFile(path.join(__dirname, 'public/home.html'));
         }
         const val = await dbQuery.get('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?', [noticia.id]);
         const comments = await dbQuery.all('SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil FROM comentarios c JOIN usuarios u ON c.user_id = u.id WHERE noticia_id = ? ORDER BY fecha DESC', [noticia.id]);
@@ -358,7 +358,7 @@ app.get('/noticias/:slug', async (req, res) => {
     try {
         console.log(`📖 Sirviendo página dedicada para: ${req.params.slug}`);
         const noticia = await dbQuery.get('SELECT * FROM noticias WHERE slug = ?', [req.params.slug]);
-        if (!noticia) return res.sendFile(path.join(__dirname, 'public/index.html'));
+        if (!noticia) return res.sendFile(path.join(__dirname, 'public/home.html'));
         
         const val = await dbQuery.get('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?', [noticia.id]);
         const comments = await dbQuery.all('SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil FROM comentarios c JOIN usuarios u ON c.user_id = u.id WHERE noticia_id = ? ORDER BY fecha DESC LIMIT 10', [noticia.id]);
@@ -459,10 +459,10 @@ app.get('/noticias/:slug', async (req, res) => {
 </body>
 </html>`;
         res.send(html);
-    } catch (err) { res.sendFile(path.join(__dirname, 'public/index.html')); }
+    } catch (err) { res.sendFile(path.join(__dirname, 'public/home.html')); }
 });
 
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public/home.html')));
 
 app.listen(PORT, () => {
     console.log(`🚀 Intlax escuchando en puerto ${PORT}`);
