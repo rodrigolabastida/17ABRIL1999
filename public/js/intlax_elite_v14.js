@@ -184,13 +184,33 @@ function renderArticleDetail(noticia) {
                 <div class="card" style="padding:25px; background:#1C1C1E; border-radius:20px; border:1px solid #333;">
                     <h3 style="font-size:19px; font-weight:800; margin-bottom:18px; display:flex; align-items:center; gap:10px;"><i class='bx bxs-group' style="color:var(--accent); font-size:24px;"></i> Comunidad</h3>
                     <div id="comments-router-box">
-                        <p style="color:#666; font-size:14px; text-align:center; padding:20px;">Cargando comentarios...</p>
+                        <p style="color:#666; font-size:14px; text-align:center; padding:20px;">Cargando opiniones...</p>
+                    </div>
+                    <div style="margin-top:20px; border-top:1px solid #333; padding-top:20px;">
+                        <textarea id="nc-router" style="width:100%; background:#121212; border:1px solid #444; border-radius:12px; color:#fff; padding:15px; font-family:inherit; box-sizing:border-box;" placeholder="¿Qué opinas sobre esto?" rows="3"></textarea>
+                        <button onclick="postCommentApp('${noticia.id}')" style="width:100%; background:var(--accent); border:none; padding:15px; border-radius:12px; font-weight:800; margin-top:15px; cursor:pointer;">Publicar opinión</button>
                     </div>
                 </div>
             </div>
         </div>
     `;
     fetchCommentsForRouter(noticia.id);
+}
+
+async function postCommentApp(noticiaId) {
+    const t = document.getElementById('nc-router').value;
+    if(!t) return;
+    try {
+        const r = await fetch('/api/v1/comentar', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({noticia_id: noticiaId, comentario: t})
+        });
+        if(r.ok) {
+            document.getElementById('nc-router').value = '';
+            fetchCommentsForRouter(noticiaId);
+        }
+    } catch (e) { console.error('Error al comentar:', e); }
 }
 
 async function votarApp(noticiaId, puntos) {
@@ -204,9 +224,9 @@ async function votarApp(noticiaId, puntos) {
         if(r.ok){
             document.getElementById('battery-rating').setAttribute('data-value', Math.round(data.promedio));
             document.getElementById('battery-status').innerText = `${parseFloat(data.promedio).toFixed(1)} de 5 Estrellas (${data.total} votos)`;
-            alert('¡Gracias por votar!');
+            alert('¡Gracias por tu voto ciudadano!');
         } else {
-            alert(data.error === 'Login necesario' ? 'Inicia sesión para votar' : data.error);
+            alert(data.error);
         }
     } catch (e) { console.error('Error al votar:', e); }
 }

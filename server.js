@@ -100,8 +100,9 @@ async function initDB() {
             CREATE TABLE IF NOT EXISTS comentarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 noticia_id TEXT,
-                user_id INTEGER,
+                user_id INTEGER NULL,
                 comentario TEXT,
+                ip_address TEXT,
                 fecha DATETIME DEFAULT (datetime('now')),
                 FOREIGN KEY (noticia_id) REFERENCES noticias(id),
                 FOREIGN KEY (user_id) REFERENCES usuarios(id)
@@ -109,8 +110,9 @@ async function initDB() {
             CREATE TABLE IF NOT EXISTS valoraciones (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 noticia_id TEXT,
-                user_id INTEGER,
+                user_id INTEGER NULL,
                 puntos INTEGER CHECK(puntos BETWEEN 1 AND 5),
+                ip_address TEXT,
                 FOREIGN KEY (noticia_id) REFERENCES noticias(id),
                 FOREIGN KEY (user_id) REFERENCES usuarios(id)
             );
@@ -129,6 +131,17 @@ async function initDB() {
             CREATE INDEX IF NOT EXISTS idx_vistas ON noticias(vistas);
         `);
         console.log('✅ Base de datos optimizada con índices de velocidad.');
+
+        // Migración simple para columnas nuevas (Anonymous Voting/Comments)
+        try {
+            await dbQuery.exec(`
+                ALTER TABLE comentarios ADD COLUMN ip_address TEXT;
+                ALTER TABLE valoraciones ADD COLUMN ip_address TEXT;
+            `);
+            console.log('✅ Columnas de IP añadidas a tablas existentes.');
+        } catch (e) {
+            // Ignoramos si las columnas ya existen
+        }
     } catch (err) {
         console.error('❌ Error al inicializar tablas:', err.message);
     }
@@ -356,25 +369,51 @@ app.get('/api/v1/noticias/:slug', async (req, res) => {
 });
 
 app.post('/api/v1/valorar', async (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ error: 'Login necesario' });
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const userId = req.user ? req.user.id : null;
+    
     try {
-        await dbQuery.run('INSERT INTO valoraciones (noticia_id, user_id, puntos) VALUES (?, ?, ?)', [req.body.noticia_id, req.user.id, req.body.puntos]);
+        // Verificar si ya votó (por IP o por Usuario)
+        let existing = null;
+        if (userId) {
+            existing = await dbQuery.get('SELECT id FROM valoraciones WHERE noticia_id = ? AND user_id = ?', [req.body.noticia_id, userId]);
+        } else {
+            existing = await dbQuery.get('SELECT id FROM valoraciones WHERE noticia_id = ? AND ip_address = ? AND user_id IS NULL', [req.body.noticia_id, ip]);
+        }
+
+        if (existing) {
+            return res.status(400).json({ error: 'Ya has emitido tu voto para esta noticia.' });
+        }
+
+        await dbQuery.run('INSERT INTO valoraciones (noticia_id, user_id, puntos, ip_address) VALUES (?, ?, ?, ?)', 
+            [req.body.noticia_id, userId, req.body.puntos, ip]);
+            
         const val = await dbQuery.get('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?', [req.body.noticia_id]);
         res.json({ ok: true, promedio: val.promedio, total: val.total });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/v1/comentar', async (req, res) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ error: 'Login necesario' });
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const userId = req.user ? req.user.id : null;
+    
     try {
-        await dbQuery.run('INSERT INTO comentarios (noticia_id, user_id, comentario) VALUES (?, ?, ?)', [req.body.noticia_id, req.user.id, req.body.comentario]);
+        await dbQuery.run('INSERT INTO comentarios (noticia_id, user_id, comentario, ip_address) VALUES (?, ?, ?, ?)', 
+            [req.body.noticia_id, userId, req.body.comentario, ip]);
         res.json({ ok: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/v1/comentarios', async (req, res) => {
     try {
-        const rows = await dbQuery.all('SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil FROM comentarios c JOIN usuarios u ON c.user_id = u.id WHERE noticia_id = ? ORDER BY fecha DESC', [req.query.noticia_id]);
+        const rows = await dbQuery.all(`
+            SELECT c.*, COALESCE(u.nombre, 'Ciudadano Anónimo') as usuario_nombre, 
+            COALESCE(u.foto_perfil, '/img/avatar-anonimo.jpg') as foto_perfil 
+            FROM comentarios c 
+            LEFT JOIN usuarios u ON c.user_id = u.id 
+            WHERE noticia_id = ? 
+            ORDER BY fecha DESC
+        `, [req.query.noticia_id]);
         res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -423,7 +462,14 @@ app.get('/noticias/:slug', async (req, res) => {
         if (!noticia) return res.sendFile(path.join(__dirname, 'public/home.html'));
         
         const val = await dbQuery.get('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?', [noticia.id]);
-        const comments = await dbQuery.all('SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil FROM comentarios c JOIN usuarios u ON c.user_id = u.id WHERE noticia_id = ? ORDER BY fecha DESC LIMIT 10', [noticia.id]);
+        const comments = await dbQuery.all(`
+            SELECT c.*, COALESCE(u.nombre, 'Ciudadano Anónimo') as usuario_nombre, 
+            COALESCE(u.foto_perfil, '/img/avatar-anonimo.jpg') as foto_perfil 
+            FROM comentarios c 
+            LEFT JOIN usuarios u ON c.user_id = u.id 
+            WHERE noticia_id = ? 
+            ORDER BY fecha DESC LIMIT 10
+        `, [noticia.id]);
         
         const promedio = val.promedio ? parseFloat(val.promedio).toFixed(1) : '0';
         const pct = Math.round((parseFloat(promedio) / 5) * 100);
@@ -517,24 +563,18 @@ app.get('/noticias/:slug', async (req, res) => {
                 ${comments.length ? comments.map(c => `
                     <div class="comment">
                         <div class="comment-user">
-                            <img src="${c.foto_perfil}" class="comment-img">
-                            <span>${c.usuario_nombre}</span>
+                            <img src="${c.foto_perfil || '/img/avatar-anonimo.jpg'}" class="comment-img">
+                            <span>${c.usuario_nombre || 'Ciudadano Anónimo'}</span>
                         </div>
                         <p class="comment-text">${c.comentario}</p>
                     </div>
                 `).join('') : '<p style="color:#666; font-size:14px; text-align:center; padding:10px;">Aún no hay comentarios. ¡Sé el primero!</p>'}
             </div>
-            ${req.isAuthenticated() ? `
-                <div style="margin-top:15px; border-top:1px solid #333; padding-top:15px;">
-                    <textarea id="nc" class="input-area" placeholder="¿Qué opinas sobre esto?" rows="3"></textarea>
-                    <button onclick="sc()" class="pub-btn">Publicar mi opinión</button>
-                </div>
-            ` : `
-                <div style="text-align:center; margin-top:20px; border-top:1px solid #333; padding-top:20px;">
-                    <p style="font-size:14px; margin-bottom:10px;">Inicia sesión para participar en la comunidad.</p>
-                    <a href="/auth/google" class="main-btn" style="padding:10px; font-size:14px; background:#fff; color:#000;">Entrar con Google</a>
-                </div>
-            `}
+            <div style="margin-top:15px; border-top:1px solid #333; padding-top:15px;">
+                <textarea id="nc" class="input-area" placeholder="Escribe tu opinión de forma anónima..." rows="3"></textarea>
+                <button onclick="sc()" class="pub-btn">Publicar mi opinión</button>
+                ${!req.isAuthenticated() ? `<p style="font-size:10px; color:#666; margin-top:8px; text-align:center;">Estás comentando como invitado. Inicia sesión para usar tu nombre y foto.</p>` : ''}
+            </div>
         </div>
     </div>
     <script>
