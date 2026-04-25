@@ -20,15 +20,26 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 const app = express();
+app.set('trust proxy', 1); // Necesario para detectar HTTPS detrás de proxies como Nginx
 app.use(express.json());
 app.use(cors());
 app.use(session({
     secret: process.env.SESSION_SECRET || 'intlax_secret',
     resave: false,
-    saveUninitialized: false
+    saveUninitialized: false,
+    cookie: { secure: process.env.NODE_ENV === 'production' } // Recomendado para HTTPS
 }));
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Middleware para verificar si Auth esta configurado
+const authConfigured = (req, res, next) => {
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+        return res.status(503).send('Servicio de autenticación no configurado.');
+    }
+    next();
+};
+
 app.get('/ping', (req, res) => res.send('pong'));
 
 const parser = new Parser({
@@ -338,8 +349,8 @@ app.get('/api/v1/comentarios', async (req, res) => {
 app.get('/api/v1/user-status', (req, res) => res.json(req.user || {}));
 
 // Auth
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/' }), (req, res) => res.redirect('/'));
+app.get('/auth/google', authConfigured, passport.authenticate('google', { scope: ['profile', 'email'] }));
+app.get('/auth/google/callback', authConfigured, passport.authenticate('google', { failureRedirect: '/' }), (req, res) => res.redirect('/'));
 app.get('/auth/logout', (req, res) => { req.logout(() => res.redirect('/')); });
 
 // SSR Noticia

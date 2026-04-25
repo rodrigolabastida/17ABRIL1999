@@ -188,49 +188,66 @@ async function fetchNews(params = '') {
         const data = await response.json();
         
         globalArticles = [data.noticiaPrincipal, ...data.noticiasSecundarias];
-        renderHero(data.noticiaPrincipal);
-        renderFeed(data.noticiasSecundarias);
+        
+        // Tomamos la principal y las primeras 2 secundarias para el carrusel
+        const heroArticles = [data.noticiaPrincipal, ...data.noticiasSecundarias.slice(0, 2)];
+        const feedArticles = data.noticiasSecundarias.slice(2);
+
+        renderHeroCarousel(heroArticles);
+        renderFeed(feedArticles);
         attachClickBindings();
     } catch (err) {
         console.error('Error cargando noticias:', err);
     }
 }
 
-function renderHero(noticia) {
-    if(!noticia) return;
+function renderHeroCarousel(noticias) {
+    if(!noticias || noticias.length === 0) return;
     const heroContainer = document.getElementById('hero-container');
-    // Envolvemos en un link para que sea nativo y más robusto
-    heroContainer.innerHTML = `
-        <a href="/noticias/${noticia.slug}" class="hero-card-link" style="text-decoration:none; color:inherit;">
-            <div class="hero-card" data-id="${noticia.id}">
-                <img class="hero-img" src="${noticia.imageUrl}" alt="${noticia.title}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
-                <div class="hero-overlay">
-                    <span class="category-badge">${noticia.source}</span>
-                    <h2 class="hero-title">${noticia.title}</h2>
+    
+    let carouselHTML = '';
+    noticias.forEach(noticia => {
+        carouselHTML += `
+            <a href="/noticias/${noticia.slug}" class="hero-card-link" style="text-decoration:none; color:inherit;">
+                <div class="hero-card" data-id="${noticia.id}">
+                    <div class="hero-img-wrapper">
+                        <img src="${noticia.imageUrl}" alt="${noticia.title}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
+                        <div class="hero-gradient">
+                            <div class="hero-meta">
+                                <span class="tag">${noticia.source}</span>
+                                <span>• Exclusivo Intlax</span>
+                            </div>
+                            <h2 class="hero-title">${noticia.title}</h2>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </a>
-    `;
+            </a>
+        `;
+    });
+    
+    heroContainer.innerHTML = carouselHTML;
 }
 
 function renderFeed(noticias) {
     const feedContainer = document.getElementById('feed-container');
     let feedHTML = '';
     
-    noticias.forEach(noticia => {
+    noticias.forEach((noticia, index) => {
+        // Alternamos algunas tarjetas para dar dinamismo (opcional, por ahora mantenemos consistencia premium)
         feedHTML += `
             <a href="/noticias/${noticia.slug}" class="news-card-link" style="text-decoration:none; color:inherit;">
-                <article class="news-card" data-id="${noticia.id}">
+                <article class="news-card" data-id="${noticia.id}" style="animation-delay: ${index * 0.05}s">
                     <img class="news-thumb" src="${noticia.imageUrl}" alt="${noticia.source}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
                     <div class="news-info">
+                        <div class="news-meta">
+                             <span style="color:var(--accent); font-weight:700;">${noticia.source}</span>
+                        </div>
                         <h3 class="news-title">${noticia.title}</h3>
                         <div class="news-bottom">
                             <div class="news-meta">
-                                <span>${noticia.category}</span>
-                                <span>• ${(noticia.views/1000).toFixed(1)}K vistas</span>
+                                <span>${(noticia.views/1000).toFixed(1)}K lecturas</span>
                             </div>
                             <div class="news-actions">
-                                <i class='bx bx-message-rounded'></i>
                                 <i class='bx bx-share-alt' ></i>
                             </div>
                         </div>
@@ -252,22 +269,40 @@ function attachClickBindings() {
 function setupBottomNav() {
     const homeBtn = document.getElementById('nav-home');
     const searchBtn = document.getElementById('nav-search');
+    const profileBtn = document.getElementById('nav-profile');
+    const forosBtn = document.getElementById('nav-foros');
+    const denunciasBtn = document.getElementById('nav-denuncias');
+
     const feedView = document.getElementById('feed-view');
     const searchView = document.getElementById('search-view');
+    const profileView = document.getElementById('profile-view');
 
-    homeBtn.addEventListener('click', () => {
-        feedView.classList.remove('hidden');
-        searchView.classList.add('hidden');
-        homeBtn.classList.add('active');
-        searchBtn.classList.remove('active');
-    });
-
-    searchBtn.addEventListener('click', () => {
-        searchView.classList.remove('hidden');
+    function showView(viewId) {
+        // Ocultar todas
         feedView.classList.add('hidden');
-        searchBtn.classList.add('active');
-        homeBtn.classList.remove('active');
-    });
+        searchView.classList.add('hidden');
+        profileView.classList.add('hidden');
+        
+        // Quitar activos de botones
+        [homeBtn, searchBtn, profileBtn, forosBtn, denunciasBtn].forEach(btn => btn?.classList.remove('active'));
+
+        // Mostrar seleccionada
+        if (viewId === 'home') {
+            feedView.classList.remove('hidden');
+            homeBtn.classList.add('active');
+        } else if (viewId === 'search') {
+            searchView.classList.remove('hidden');
+            searchBtn.classList.add('active');
+        } else if (viewId === 'profile') {
+            profileView.classList.remove('hidden');
+            profileBtn.classList.add('active');
+            renderProfileView();
+        }
+    }
+
+    homeBtn.addEventListener('click', () => showView('home'));
+    searchBtn.addEventListener('click', () => showView('search'));
+    profileBtn.addEventListener('click', () => showView('profile'));
 
     const inputBusqueda = document.getElementById('input-busqueda');
     inputBusqueda.addEventListener('input', (e) => {
@@ -277,6 +312,50 @@ function setupBottomNav() {
             executeSearch(term);
         }, 300);
     });
+}
+
+async function renderProfileView() {
+    const container = document.getElementById('profile-content');
+    container.innerHTML = `<div style="text-align:center; padding:50px;"><p>Cargando perfil...</p></div>`;
+
+    try {
+        const response = await fetch('/api/v1/user-status');
+        const user = await response.json();
+
+        if (user && user.id) {
+            container.innerHTML = `
+                <div class="profile-card">
+                    <img src="${user.foto_perfil}" style="width:100px; height:100px; border-radius:50%; border:4px solid var(--accent); margin-bottom:20px;">
+                    <h2 style="font-size:24px; font-weight:800; margin-bottom:5px;">${user.nombre}</h2>
+                    <p style="color:var(--text-sec); margin-bottom:25px;">${user.email}</p>
+                    
+                    <div class="profile-stats">
+                        <div class="stat-box">
+                            <span class="stat-value">${user.puntos_reputacion || 0}</span>
+                            <span class="stat-label">Puntos</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-value">Bronce</span>
+                            <span class="stat-label">Rango</span>
+                        </div>
+                    </div>
+
+                    <a href="/auth/logout" class="btn-secondary" style="display:block; text-decoration:none; padding:15px; border-radius:12px; font-weight:700;">Cerrar Sesión</a>
+                </div>
+            `;
+        } else {
+            container.innerHTML = `
+                <div class="login-prompt">
+                    <i class='bx bxs-user-circle' style="font-size:80px; color:#333; margin-bottom:20px;"></i>
+                    <h2 style="font-size:22px; font-weight:800; margin-bottom:10px;">Únete a Intlax</h2>
+                    <p style="color:var(--text-sec); margin-bottom:30px; font-size:15px;">Inicia sesión para comentar, valorar noticias y ganar reputación en la comunidad.</p>
+                    <a href="/auth/google" class="btn-primary" style="display:block; text-decoration:none; padding:18px; border-radius:15px; font-weight:800; font-size:16px;">Iniciar sesión con Google</a>
+                </div>
+            `;
+        }
+    } catch (e) {
+        container.innerHTML = `<div style="text-align:center; padding:50px;"><p>Error al cargar el perfil. Intenta de nuevo.</p></div>`;
+    }
 }
 
 async function executeSearch(term) {

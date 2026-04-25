@@ -11,7 +11,7 @@
     <!-- Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <!-- Boxicons para íconos -->
     <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
     <!-- Estilos -->
@@ -46,16 +46,18 @@
 
     <!-- Contenido Principal -->
     <main class="content-wrapper">
-        <div id="hero-container">
-            <!-- Inyectado dinámicamente por JS -->
-        </div>
+        <div id="feed-view">
+            <div id="hero-container">
+                <!-- Inyectado dinámicamente por JS -->
+            </div>
 
-        <div id="feed-container" class="feed-list">
-            <!-- Inyectado dinámicamente por JS -->
+            <div id="feed-container" class="feed-list">
+                <!-- Inyectado dinámicamente por JS -->
+            </div>
         </div>
 
         <!-- Vista de Búsqueda (Oculta por defecto) -->
-        <section id="vista-busqueda" class="hidden">
+        <section id="search-view" class="hidden">
             <div class="search-header">
                 <input type="search" id="input-busqueda" placeholder="Buscar noticias, accidentes o reportes..." autocomplete="off">
             </div>
@@ -71,28 +73,33 @@
                     <p>No se encontraron resultados para tu búsqueda.</p>
                 </div>
             </div>
+        <!-- Vista de Perfil (Oculta por defecto) -->
+        <section id="profile-view" class="hidden">
+            <div class="profile-container" id="profile-content">
+                <!-- Inyectado por JS -->
+            </div>
         </section>
     </main>
 
     <!-- Bottom Nav -->
     <nav class="bottom-nav">
-        <div class="bottom-nav-item active">
+        <div class="bottom-nav-item active" id="nav-home">
             <i class='bx bxs-home' ></i>
             <span>Inicio</span>
         </div>
-        <div class="bottom-nav-item">
+        <div class="bottom-nav-item" id="nav-search">
             <i class='bx bx-search' ></i>
             <span>Buscar</span>
         </div>
-        <div class="bottom-nav-item">
+        <div class="bottom-nav-item" id="nav-foros">
             <i class='bx bx-message-square-detail'></i>
             <span>Foros</span>
         </div>
-        <div class="bottom-nav-item">
+        <div class="bottom-nav-item" id="nav-denuncias">
             <i class='bx bx-error-circle' ></i>
             <span>Denuncias</span>
         </div>
-        <div class="bottom-nav-item">
+        <div class="bottom-nav-item" id="nav-profile">
             <i class='bx bx-user' ></i>
             <span>Perfil</span>
         </div>
