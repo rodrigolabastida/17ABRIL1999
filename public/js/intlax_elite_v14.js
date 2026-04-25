@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('%c 🚀 Intlax v1.4 ACTIVO - Foros Estables ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
+    console.log('%c 🚀 Intlax v1.45 ACTIVO - UI Simplificada ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
     
     // El Router toma el control total si estamos en una noticia
     const isArticle = await handleRouting();
@@ -477,6 +477,7 @@ function setupBottomNav() {
         searchView.classList.add('hidden');
         profileView.classList.add('hidden');
         document.getElementById('foros-view').classList.add('hidden');
+        document.getElementById('denuncias-view').classList.add('hidden');
         
         // Quitar activos de botones
         [homeBtn, searchBtn, profileBtn, forosBtn, denunciasBtn].forEach(btn => btn?.classList.remove('active'));
@@ -496,6 +497,9 @@ function setupBottomNav() {
             document.getElementById('foros-view').classList.remove('hidden');
             forosBtn.classList.add('active');
             renderForosView();
+        } else if (viewId === 'denuncias') {
+            document.getElementById('denuncias-view').classList.remove('hidden');
+            denunciasBtn.classList.add('active');
         }
     }
 
@@ -503,21 +507,7 @@ function setupBottomNav() {
     searchBtn.addEventListener('click', () => showView('search'));
     profileBtn.addEventListener('click', () => showView('profile'));
     forosBtn.addEventListener('click', () => showView('foros'));
-
-    // Soporte para el menú superior
-    const categoryNav = document.getElementById('category-nav');
-    if (categoryNav) {
-        categoryNav.querySelectorAll('.nav-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const text = item.innerText;
-                if (text === 'NOTICIAS') showView('home');
-                else if (text === 'FOROS') showView('foros');
-                
-                categoryNav.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-                item.classList.add('active');
-            });
-        });
-    }
+    denunciasBtn.addEventListener('click', () => showView('denuncias'));
 
     const inputBusqueda = document.getElementById('input-busqueda');
     inputBusqueda.addEventListener('input', (e) => {

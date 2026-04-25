@@ -68,7 +68,7 @@
     <header class="top-bar">
         <div style="display:flex; align-items:baseline; gap:6px;">
             <h1 class="logo">Intlax</h1>
-            <span style="font-size:9px; color:#555; font-weight:700; letter-spacing:0.5px; opacity:0.6;">v1.4</span>
+            <span style="font-size:9px; color:#555; font-weight:700; letter-spacing:0.5px; opacity:0.6;">v1.45</span>
         </div>
         <div class="top-bar-icons">
             <div class="notification-icon">
@@ -82,16 +82,6 @@
         </div>
     </header>
 
-    <!-- Top Nav -->
-    <nav class="top-nav">
-        <ul class="nav-list" id="category-nav">
-            <li class="nav-item active">NOTICIAS</li>
-            <li class="nav-item">FOROS</li>
-            <li class="nav-item">DENUNCIAS</li>
-            <li class="nav-item">MI CIUDAD</li>
-            <li class="nav-item">EVENTOS</li>
-        </ul>
-    </nav>
 
     <!-- Contenido Principal -->
     <main class="content-wrapper">
@@ -142,6 +132,18 @@
         <section id="profile-view" class="hidden">
             <div class="profile-container" id="profile-content">
                 <!-- Inyectado por JS -->
+            </div>
+        </section>
+
+        <!-- Vista de Denuncias (Nuevo) -->
+        <section id="denuncias-view" class="hidden">
+            <div class="section-placeholder" style="text-align:center; padding:60px 20px; color:#fff;">
+                <i class='bx bx-error-circle' style="font-size:80px; color:var(--accent); margin-bottom:20px;"></i>
+                <h2 style="font-size:24px; font-weight:800; margin-bottom:12px;">Buzón de Denuncias</h2>
+                <p style="color:var(--text-sec); font-size:16px; max-width:300px; margin:0 auto;">Próximamente: Podrás reportar incidentes, baches, fallas de luz y más directamente a las autoridades.</p>
+                <div style="margin-top:30px; display:inline-block; padding:12px 24px; border:1px solid #333; border-radius:30px; font-size:14px; font-weight:700; color:#666;">
+                    Estamos trabajando en esta función
+                </div>
             </div>
         </section>
     </main>
