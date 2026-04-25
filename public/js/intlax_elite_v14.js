@@ -3,7 +3,8 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('%c 🚀 Intlax v1.51 ACTIVO - Geovisor bajo demanda ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
+    console.log('%c 🚀 Intlax v2.2 ACTIVO - Blindaje Hostinger ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
+    localStorage.removeItem('intlax_loc_pref'); // Limpieza de rastro de versiones viejas
     
     // El Router toma el control total si estamos en una noticia
     const isArticle = await handleRouting();
@@ -327,28 +328,7 @@ async function checkUserSession() {
     } catch (e) {}
 }
 
-function checkLocationPermission() {
-    const locPref = localStorage.getItem('intlax_loc_pref');
-    if (locPref === 'granted') {
-        getLocationAndFetch();
-    } else if (locPref === 'denied') {
-        fetchNews(); 
-    } else {
-        document.getElementById('location-modal-overlay').classList.remove('hidden');
-    }
-}
-
-document.getElementById('btn-allow-loc').addEventListener('click', () => {
-    document.getElementById('location-modal-overlay').classList.add('hidden');
-    localStorage.setItem('intlax_loc_pref', 'granted');
-    getLocationAndFetch();
-});
-
-document.getElementById('btn-deny-loc').addEventListener('click', () => {
-    document.getElementById('location-modal-overlay').classList.add('hidden');
-    localStorage.setItem('intlax_loc_pref', 'denied');
-    fetchNews(); 
-});
+// La lógica de ubicación automática ha sido eliminada en v2.1 para favorecer el Radar Premium bajo demanda.
 
 function setupGeoButton() {
     const btn = document.getElementById('btn-geo-activate');
@@ -535,6 +515,14 @@ function setupBottomNav() {
             executeSearch(term);
         }, 300);
     });
+
+    // Premium Geo-Search Listener
+    const btnGeoPremium = document.getElementById('btn-geo-search-premium');
+    if (btnGeoPremium) {
+        btnGeoPremium.addEventListener('click', () => {
+            triggerGeoSearch();
+        });
+    }
 }
 
 async function renderProfileView() {
@@ -795,3 +783,93 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.style.overflow = '';
     });
 });
+
+// --- LÓGICA DE BÚSQUEDA GEO PREMIUM (v2.0) ---
+async function triggerGeoSearch() {
+    const overlay = document.getElementById('geo-search-overlay');
+    const statusVal = document.getElementById('geo-status-val');
+    const locVal = document.getElementById('geo-loc-val');
+    const mainTitle = document.getElementById('geo-main-title');
+    const mainDesc = document.getElementById('geo-main-desc');
+    const inputBusqueda = document.getElementById('input-busqueda');
+
+    if (!overlay) return;
+
+    // 1. Mostrar Overlay con fade-in
+    overlay.classList.remove('hidden');
+    overlay.style.opacity = '0';
+    setTimeout(() => overlay.style.opacity = '1', 10);
+
+    // Reiniciar textos
+    statusVal.innerText = 'INICIANDO...';
+    locVal.innerText = 'DETECTANDO...';
+    mainTitle.innerText = 'Buscando Noticias';
+    mainDesc.innerText = 'Sincronizando con satélites locales...';
+
+    // Función para crear partículas de "noticias encontradas"
+    const spawnParticle = () => {
+        const p = document.createElement('div');
+        p.className = 'geo-dot';
+        p.style.left = Math.random() * 100 + '%';
+        p.style.top = Math.random() * 100 + '%';
+        const particlesContainer = document.getElementById('geo-particles');
+        if (particlesContainer) particlesContainer.appendChild(p);
+        setTimeout(() => p.remove(), 2000);
+    };
+
+    try {
+        // 2. Obtener ubicación
+        statusVal.innerText = 'GEOLOCALIZANDO...';
+        
+        const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+        });
+
+        const { latitude, longitude } = position.coords;
+        locVal.innerText = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+        statusVal.innerText = 'SINCRONIZADO';
+        statusVal.classList.remove('pulse');
+
+        // 3. Simular escaneo de señales (Efecto visual WOW)
+        mainTitle.innerText = 'Escaneando área...';
+        mainDesc.innerText = 'Analizando tráfico de datos en Tlaxcala central.';
+        
+        for(let i=0; i<15; i++) {
+            await new Promise(r => setTimeout(r, 150));
+            spawnParticle();
+            if(i === 5) mainDesc.innerText = 'Filtrando por relevancia ciudadana...';
+            if(i === 10) mainDesc.innerText = 'Calculando proximidad de incidentes...';
+        }
+
+        // 4. Ejecutar búsqueda real
+        const term = inputBusqueda ? inputBusqueda.value : '';
+        const res = await fetch(`/api/v1/search?q=${encodeURIComponent(term)}&lat=${latitude}&lng=${longitude}`);
+        const data = await res.json();
+
+        // 5. Mostrar resultados y cerrar
+        mainTitle.innerText = '¡Señales encontradas!';
+        mainDesc.innerText = `Se han detectado ${data.resultados.length} noticias cerca de tu posición.`;
+        
+        await new Promise(r => setTimeout(r, 1500));
+        
+        renderSearchResults(data.resultados);
+        
+        // Cerrar overlay
+        overlay.style.opacity = '0';
+        setTimeout(() => {
+            overlay.classList.add('hidden');
+            // Hacer scroll hasta los resultados si es necesario
+            const resultsContainer = document.getElementById('contenedor-resultados-busqueda');
+            if (resultsContainer) resultsContainer.scrollIntoView({ behavior: 'smooth' });
+        }, 500);
+
+    } catch (error) {
+        console.error('GeoSearch Error:', error);
+        statusVal.innerText = 'ERROR';
+        mainTitle.innerText = 'Error de Señal';
+        mainDesc.innerText = 'No pudimos acceder a tu ubicación. Por favor, activa los permisos de GPS.';
+        
+        await new Promise(r => setTimeout(r, 3000));
+        overlay.classList.add('hidden');
+    }
+}

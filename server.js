@@ -8,7 +8,19 @@ const sqlite3 = require('sqlite3').verbose();
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+// Configuración de variables de entorno con respaldo para Hostinger
+const fs = require('fs');
+const localEnv = path.join(__dirname, '.env');
+const parentEnv = path.join(__dirname, '..', '.env');
+
+if (fs.existsSync(localEnv)) {
+    require('dotenv').config({ path: localEnv });
+} else if (fs.existsSync(parentEnv)) {
+    require('dotenv').config({ path: parentEnv });
+    console.log('🛡️ Usando .env desde carpeta superior (Blindaje Hostinger activo)');
+} else {
+    require('dotenv').config(); // Fallback por si están en variables de sistema
+}
 
 process.on('uncaughtException', (err) => {
     console.error('❌ CRASH: Uncaught Exception:', err.message);
@@ -427,8 +439,22 @@ app.get('/api/v1/foro', async (req, res) => {
 
 app.get('/api/v1/search', async (req, res) => {
     const q = `%${(req.query.q || '').trim()}%`;
+    const { lat, lng } = req.query;
     try {
-        const rows = await dbQuery.all(`SELECT * FROM noticias WHERE titulo LIKE ? OR resumen LIKE ? LIMIT 50`, [q, q]);
+        let sql = `SELECT * FROM noticias`;
+        let params = [];
+        let where = ` WHERE (titulo LIKE ? OR resumen LIKE ?)`;
+        params.push(q, q);
+
+        if (lat && lng) {
+            sql = `SELECT *, ((lat - ?) * (lat - ?) + (lng - ?) * (lng - ?)) as distance_sq FROM noticias`;
+            params = [lat, lat, lng, lng, ...params];
+            sql += where + ` ORDER BY distance_sq ASC LIMIT 50`;
+        } else {
+            sql += where + ` ORDER BY fecha_publicacion DESC LIMIT 50`;
+        }
+
+        const rows = await dbQuery.all(sql, params);
         res.json({ resultados: rows.map(formatearFront), relacionados: [] });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
