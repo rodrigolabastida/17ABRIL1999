@@ -198,7 +198,13 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 
 function limpiarUrlAltaResolucion(url) {
     if (!url) return null;
-    return url.replace(/-\d+x\d+(?=\.[a-zA-Z]+$)/, '').replace('-scaled', '');
+    let cleanUrl = url.trim();
+    // Si es un srcset (varias URLs separadas por comas), tomamos la primera
+    if (cleanUrl.includes(',')) cleanUrl = cleanUrl.split(',')[0];
+    // Si tiene medidas (ej: url.jpg 600w), tomamos solo la URL
+    if (cleanUrl.includes(' ')) cleanUrl = cleanUrl.trim().split(' ')[0];
+    
+    return cleanUrl.replace(/-\d+x\d+(?=\.[a-zA-Z]+$)/, '').replace('-scaled', '').trim();
 }
 
 async function extraerUrlImagen(item) {
@@ -210,8 +216,8 @@ async function extraerUrlImagen(item) {
         if (htmlToSearch) {
             const $ = cheerio.load(htmlToSearch);
             $('img').each((i, el) => {
-                const src = $(el).attr('data-lazy-src') || $(el).attr('data-src') || $(el).attr('srcset') || $(el).attr('src');
-                if (src) { urlCruda = src; return false; }
+                const src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-lazy-src') || $(el).attr('srcset');
+                if (src && src.startsWith('http')) { urlCruda = src; return false; }
             });
         }
     }
@@ -283,6 +289,7 @@ cron.schedule('0 * * * *', () => fetchAllRssFeeds(true));
 function formatearFront(row) {
     // Si la noticia es vieja y no tiene slug, lo generamos al vuelo
     const finalSlug = row.slug || (row.titulo ? generarSlug(row.titulo) : row.id);
+    const finalImage = limpiarUrlAltaResolucion(row.imageUrl) || '/img/placeholder-noticia.jpg';
     
     return {
         id: row.id,
@@ -295,8 +302,8 @@ function formatearFront(row) {
         puntuacion: row.puntuacion,
         views: row.vistas,
         summary: row.resumen,
-        image: row.imageUrl,
-        imageUrl: row.imageUrl,
+        image: finalImage,
+        imageUrl: finalImage,
         slug: finalSlug,
         lat: row.lat,
         lng: row.lng
