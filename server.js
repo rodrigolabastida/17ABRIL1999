@@ -335,20 +335,19 @@ app.get('/api/v1/feed', async (req, res) => {
             return res.json(cacheFeed);
         }
 
-        // Algoritmo de Relevancia Dinámico:
-        // (Vistas + Comentarios * 20 + RatingPromedio * 50) dividido por tiempo transcurrido (Time Decay)
+        // Algoritmo de Relevancia Dinámico Optimizado (v18.8)
         const rows = await dbQuery.all(`
-            SELECT *, 
+            SELECT n.*, 
             (
-                (
-                    vistas + 
-                    (SELECT COUNT(*) FROM comentarios WHERE noticia_id = noticias.id) * 20 + 
-                    COALESCE((SELECT AVG(puntos) FROM valoraciones WHERE noticia_id = noticias.id), 0) * 50
-                ) * (CASE WHEN imageUrl IS NULL OR imageUrl = '' OR imageUrl LIKE '%placeholder%' THEN 0.01 ELSE 1.0 END)
-            ) / (julianday('now') - julianday(fecha_captura) + 0.1) as score
-            FROM noticias 
+                (n.vistas + COUNT(DISTINCT c.id) * 20 + COALESCE(AVG(v.puntos), 0) * 50) 
+                * (CASE WHEN n.imageUrl LIKE '%placeholder%' THEN 0.01 ELSE 1.0 END)
+            ) / (julianday('now') - julianday(n.fecha_captura) + 0.1) as score
+            FROM noticias n
+            LEFT JOIN comentarios c ON n.id = c.noticia_id
+            LEFT JOIN valoraciones v ON n.id = v.noticia_id
+            GROUP BY n.id
             ORDER BY score DESC 
-            LIMIT 100
+            LIMIT 60
         `);
         
         if (!rows.length) return res.json({ noticiaPrincipal: null, noticiasSecundarias: [] });
@@ -370,20 +369,14 @@ app.get('/api/v1/search', async (req, res) => {
 });
 
 app.get('/api/v1/noticias/:slug', async (req, res) => {
-    console.log(`🔍 SSR Request para slug: ${req.params.slug}`);
     try {
         const noticia = await dbQuery.get('SELECT * FROM noticias WHERE slug = ?', [req.params.slug]);
-        if (!noticia) {
-            console.log(`⚠️ Noticia no encontrada en DB para slug: ${req.params.slug}. Rebotando a index.`);
-            return res.status(404).json({ error: 'Noticia no encontrada' });
-        }
+        if (!noticia) return res.status(404).json({ error: 'Noticia no encontrada' });
         
-        // Incrementar vistas
         await dbQuery.run('UPDATE noticias SET vistas = vistas + 1 WHERE id = ?', [noticia.id]);
-        
         const val = await dbQuery.get('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?', [noticia.id]);
         const comments = await dbQuery.all('SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil FROM comentarios c JOIN usuarios u ON c.user_id = u.id WHERE noticia_id = ? ORDER BY fecha DESC', [noticia.id]);
-        res.json({ noticia, valoracion: val, comentarios: comments, user: req.user || null });
+        res.json({ noticia: formatearFront(noticia), valoracion: val, comentarios: comments, user: req.user || null });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

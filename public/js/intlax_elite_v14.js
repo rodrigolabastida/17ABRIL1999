@@ -108,13 +108,24 @@ async function loadArticleBySlug(slug) {
         const res = await fetch('/api/v1/feed');
         const data = await res.json();
         const allArticles = [data.noticiaPrincipal, ...data.noticiasSecundarias];
-        const article = allArticles.find(a => a.slug === slug);
+        let article = allArticles.find(a => a.slug === slug);
         
+        // Si no está en el TOP de la portada, la buscamos por su propio canal
+        if (!article) {
+            console.log('🔍 Noticia no está en el Top, buscando en el servidor...');
+            const res2 = await fetch('/api/v1/noticias/' + slug);
+            const data2 = await res2.json();
+            if (data2 && data2.noticia) {
+                article = data2.noticia;
+            }
+        }
+
         if (article) {
-            console.log('✅ Noticia encontrada por el router, inyectando vista...');
+            console.log('✅ Noticia encontrada, inyectando vista...');
             renderArticleDetail(article);
         } else {
-            console.error('❌ Noticia no encontrada en el feed actual');
+            console.error('❌ Noticia no encontrada en ninguna parte.');
+            window.location.href = '/'; // Fallback a inicio
         }
     } catch (e) { console.error('Error en routing:', e); }
 }
