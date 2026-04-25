@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('🚀 Intlax v11.7 ACTIVO - Carrusel con Arrastre');
+    console.log('🚀 Intlax v12.5 ACTIVO - Drag Maestro');
     
     // El Router toma el control total si estamos en una noticia
     const isArticle = await handleRouting();
@@ -25,19 +25,25 @@ function setupDragScroll() {
     if(!slider) return;
 
     let isDown = false;
-    let startDate;
     let startX;
     let scrollLeft;
+    let moved = false;
 
     slider.style.cursor = 'grab';
 
+    // Evitar que el navegador intente "arrastrar" las imágenes/links
+    slider.querySelectorAll('img, a').forEach(el => {
+        el.setAttribute('draggable', 'false');
+    });
+
     slider.addEventListener('mousedown', (e) => {
         isDown = true;
+        moved = false;
         slider.style.cursor = 'grabbing';
-        slider.style.scrollSnapType = 'none'; // Desactivamos snap temporalmente para arrastre suave
+        slider.style.scrollBehavior = 'auto'; // Instantáneo pal arrastre
+        slider.style.scrollSnapType = 'none'; 
         startX = e.pageX - slider.offsetLeft;
         scrollLeft = slider.scrollLeft;
-        startDate = new Date();
     });
 
     slider.addEventListener('mouseleave', () => {
@@ -45,19 +51,33 @@ function setupDragScroll() {
         slider.style.cursor = 'grab';
     });
 
-    slider.addEventListener('mouseup', () => {
+    slider.addEventListener('mouseup', (e) => {
         isDown = false;
         slider.style.cursor = 'grab';
-        slider.style.scrollSnapType = 'x mandatory'; // Reactivamos snap
+        slider.style.scrollSnapType = 'x mandatory';
+        slider.style.scrollBehavior = 'smooth'; 
+        
+        // Si movimos más de 5px, bloqueamos el clic para que no entre a la noticia por error
+        if (moved) {
+            e.preventDefault();
+        }
     });
 
     slider.addEventListener('mousemove', (e) => {
         if (!isDown) return;
-        e.preventDefault();
         const x = e.pageX - slider.offsetLeft;
-        const walk = (x - startX) * 2; // Velocidad de arrastre
+        const walk = (x - startX) * 1.8; 
+        if (Math.abs(walk) > 5) moved = true;
         slider.scrollLeft = scrollLeft - walk;
     });
+
+    // Bloqueador de links si hubo arrastre
+    slider.addEventListener('click', (e) => {
+        if (moved) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    }, true);
 }
 
 // Router Inteligente para detectar si estamos en una noticia
