@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('%c 🚀 Intlax v1.22 ACTIVO - Navegación Ninja ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
+    console.log('%c 🚀 Intlax v1.3 ACTIVO - Foros y Comunidad ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
     
     // El Router toma el control total si estamos en una noticia
     const isArticle = await handleRouting();
@@ -476,6 +476,7 @@ function setupBottomNav() {
         feedView.classList.add('hidden');
         searchView.classList.add('hidden');
         profileView.classList.add('hidden');
+        document.getElementById('foros-view').classList.add('hidden');
         
         // Quitar activos de botones
         [homeBtn, searchBtn, profileBtn, forosBtn, denunciasBtn].forEach(btn => btn?.classList.remove('active'));
@@ -491,12 +492,32 @@ function setupBottomNav() {
             profileView.classList.remove('hidden');
             profileBtn.classList.add('active');
             renderProfileView();
+        } else if (viewId === 'foros') {
+            document.getElementById('foros-view').classList.remove('hidden');
+            forosBtn.classList.add('active');
+            renderForosView();
         }
     }
 
     homeBtn.addEventListener('click', () => showView('home'));
     searchBtn.addEventListener('click', () => showView('search'));
     profileBtn.addEventListener('click', () => showView('profile'));
+    forosBtn.addEventListener('click', () => showView('foros'));
+
+    // Soporte para el menú superior
+    const categoryNav = document.getElementById('category-nav');
+    if (categoryNav) {
+        categoryNav.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const text = item.innerText;
+                if (text === 'NOTICIAS') showView('home');
+                else if (text === 'FOROS') showView('foros');
+                
+                categoryNav.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+            });
+        });
+    }
 
     const inputBusqueda = document.getElementById('input-busqueda');
     inputBusqueda.addEventListener('input', (e) => {
@@ -638,3 +659,102 @@ window.fillSearch = function(term) {
     input.value = term;
     executeSearch(term);
 };
+
+// --- LOGICA DE FOROS ---
+async function renderForosView(categoria = 'Todo') {
+    const container = document.getElementById('foros-container');
+    container.innerHTML = '<div class="loading-foros">Cargando debate ciudadano...</div>';
+
+    try {
+        const res = await fetch(`/api/v1/foro?categoria=${encodeURIComponent(categoria)}`);
+        const data = await res.json();
+        
+        if (!data || data.length === 0) {
+            container.innerHTML = '<div class="empty-state"><i class="bx bx-message-rounded-x"></i><p>Aún no hay debate en esta categoría. ¡Sé el primero en comentar una noticia!</p></div>';
+            return;
+        }
+
+        let html = '';
+        data.forEach((item, index) => {
+            const badgeClass = item.etiqueta_foro === 'Alerta de Seguridad' ? 'badge-seguridad' : 
+                               (item.etiqueta_foro === 'Debate Público' ? 'badge-debate' : 'badge-ayuda');
+            
+            const lifePct = Math.round((item.promedio_valoracion / 5) * 100);
+            const lifeColor = item.promedio_valoracion >= 4 ? '#22C55E' : (item.promedio_valoracion >= 3 ? '#FFCC00' : '#FF3B30');
+
+            html += `
+                <div class="foro-card" style="animation-delay: ${index * 0.1}s">
+                    <div class="foro-header">
+                        <span class="foro-badge ${badgeClass}">${item.etiqueta_foro}</span>
+                        <div class="foro-life-bar">
+                            <div class="foro-life-inner" style="width: ${lifePct}%; background: ${lifeColor};"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="foro-main" onclick="window.location.href='/noticias/${item.slug}'">
+                        <div class="foro-main-text">
+                            <h3 class="foro-title">${item.title}</h3>
+                        </div>
+                        <img src="${item.imageUrl}" class="foro-thumb" onerror="this.src='/img/placeholder-noticia.jpg'">
+                    </div>
+
+                    <div class="foro-comments-section">
+                        ${item.comentarios_destacados.length > 0 ? item.comentarios_destacados.map(c => `
+                            <div class="foro-comment-item">
+                                <img src="${c.foto_perfil}" class="foro-comment-avatar">
+                                <div class="foro-comment-content">
+                                    <p class="foro-comment-user">${c.usuario_nombre}</p>
+                                    <p class="foro-comment-text">${c.comentario}</p>
+                                </div>
+                            </div>
+                        `).join('') : '<p style="font-size:12px; color:#666; text-align:center; padding:10px;">Sin comentarios destacados aún.</p>'}
+                    </div>
+
+                    <div class="foro-quick-action">
+                        <input type="text" id="q-input-${item.id}" class="foro-input" placeholder="Únete al debate...">
+                        <button class="foro-btn-send" onclick="postQuickComment('${item.id}')">
+                            <i class='bx bxs-send'></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    } catch (e) {
+        container.innerHTML = '<div class="loading-foros">Error al cargar el foro. Reintenta.</div>';
+    }
+}
+
+window.filtrarForo = function(categoria, el) {
+    document.querySelectorAll('.chip-filter').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    renderForosView(categoria);
+};
+
+async function postQuickComment(noticiaId) {
+    const input = document.getElementById(`q-input-${noticiaId}`);
+    const text = input.value.trim();
+    if (!text) return;
+
+    try {
+        const r = await fetch('/api/v1/comentar', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({noticia_id: noticiaId, comentario: text})
+        });
+        
+        if (r.ok) {
+            input.value = '';
+            // Recargamos solo la vista de foros para ver el nuevo comentario si es posible
+            // Por simplicidad recargamos todo el feed del foro
+            renderForosView(document.querySelector('.chip-filter.active').innerText.replace('🚨 ', '').replace('🗣️ ', '').replace('🤝 ', ''));
+        } else {
+            const data = await r.json();
+            alert(data.error || 'Error al comentar');
+        }
+    } catch (e) {
+        console.error('Error quick comment:', e);
+    }
+}
+window.postQuickComment = postQuickComment;
+window.renderForosView = renderForosView;

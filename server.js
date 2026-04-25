@@ -133,13 +133,14 @@ async function initDB() {
         `);
         console.log('✅ Base de datos optimizada con índices de velocidad.');
 
-        // Migración simple para columnas nuevas (Anonymous Voting/Comments)
+        // Migración simple para columnas nuevas
         try {
             await dbQuery.exec(`
                 ALTER TABLE comentarios ADD COLUMN ip_address TEXT;
                 ALTER TABLE valoraciones ADD COLUMN ip_address TEXT;
+                ALTER TABLE noticias ADD COLUMN etiqueta_foro TEXT;
             `);
-            console.log('✅ Columnas de IP añadidas a tablas existentes.');
+            console.log('✅ Columnas de IP y Etiqueta Foro añadidas.');
         } catch (e) {
             // Ignoramos si las columnas ya existen
         }
@@ -249,9 +250,21 @@ function calcularInteres(titulo, resumen) {
     let puntuacion = 50;
     const txtTitulo = (titulo || "").toLowerCase();
     const txtResumen = (resumen || "").toLowerCase();
-    const kH = ["accidente", "muerto", "fallece", "detienen", "balacera", "robo", "asalto", "tragedia", "choque"];
+    const kH = ["accidente", "muerto", "fallece", "detienen", "balacera", "robo", "asalto", "tragedia", "choque", "incendio", "homicidio"];
     kH.forEach(p => { if (txtTitulo.includes(p)) puntuacion += 40; if (txtResumen.includes(p)) puntuacion += 20; });
     return puntuacion;
+}
+
+function asignarEtiquetaForo(titulo, resumen) {
+    const txt = (titulo + " " + resumen).toLowerCase();
+    const seguridad = ["accidente", "muerto", "fallece", "detienen", "balacera", "robo", "asalto", "tragedia", "choque", "incendio", "homicidio", "policía", "fiscalía", "ejecutado"];
+    const debate = ["gobierno", "municipio", "elecciones", "política", "congreso", "gobernadora", "alcalde", "presupuesto", "obra", "reforma"];
+    const ayuda = [" extraviado", "perdido", "mascota", "apoyo", "comunidad", "vecinos", "donación", "servicio social"];
+
+    if (seguridad.some(p => txt.includes(p))) return 'Alerta de Seguridad';
+    if (debate.some(p => txt.includes(p))) return 'Debate Público';
+    if (ayuda.some(p => txt.includes(p))) return 'Ayuda/Comunidad';
+    return null;
 }
 
 async function fetchAllRssFeeds(force = false) {
@@ -276,18 +289,20 @@ async function fetchAllRssFeeds(force = false) {
             for (const item of feed.items.slice(0, 40)) {
                 const summaryText = extractSummary(item.description || item.content);
                 const score = calcularInteres(item.title, summaryText);
+                const etiqueta = asignarEtiquetaForo(item.title, summaryText);
                 const imageUrl = await extraerUrlImagen(item);
                 const slug = generarSlug(item.title);
                 
                 // UPSERT Inteligente: No cambia el ID si ya existe, solo actualiza relevancia
                 await dbQuery.run(`
-                    INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura, slug)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura, slug, etiqueta_foro)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(linkOriginal) DO UPDATE SET 
                         puntuacion = excluded.puntuacion,
-                        vistas = vistas + 1
+                        vistas = vistas + 1,
+                        etiqueta_foro = COALESCE(noticias.etiqueta_foro, excluded.etiqueta_foro)
                 `, [Math.random().toString(36).substr(2, 9), item.title, summaryText, imageUrl, item.link, feedData.source, 
-                   item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(), score, 100, '', 19.31, -98.24, new Date().toISOString(), slug]);
+                   item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(), score, 100, '', 19.31, -98.24, new Date().toISOString(), slug, etiqueta]);
             }
         } catch (err) { 
             // Log más discreto para no alarmar al usuario si un feed falla temporalmente
@@ -320,7 +335,8 @@ function formatearFront(row) {
         imageUrl: finalImage,
         slug: finalSlug,
         lat: row.lat,
-        lng: row.lng
+        lng: row.lng,
+        etiqueta_foro: row.etiqueta_foro
     };
 }
 
@@ -357,6 +373,55 @@ app.get('/api/v1/feed', async (req, res) => {
         lastCacheTime = ahora;
         
         res.json(cacheFeed);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Endpoint de Foros: Noticias ordenadas por interacción reciente
+app.get('/api/v1/foro', async (req, res) => {
+    try {
+        const categoria = req.query.categoria; // 'Todo', 'Alerta de Seguridad', etc.
+        let filter = "WHERE n.etiqueta_foro IS NOT NULL";
+        const params = [];
+
+        if (categoria && categoria !== 'Todo') {
+            filter += " AND n.etiqueta_foro = ?";
+            params.push(categoria);
+        }
+
+        const rows = await dbQuery.all(`
+            SELECT n.*, 
+            (
+                (COUNT(DISTINCT c.id) * 50 + COUNT(DISTINCT v.id) * 30) 
+            ) as interaction_score
+            FROM noticias n
+            LEFT JOIN comentarios c ON n.id = c.noticia_id AND c.fecha >= datetime('now', '-48 hours')
+            LEFT JOIN valoraciones v ON n.id = v.noticia_id
+            ${filter}
+            GROUP BY n.id
+            ORDER BY interaction_score DESC, n.fecha_publicacion DESC
+            LIMIT 40
+        `, params);
+
+        // Para cada noticia, obtener los 3 comentarios más relevantes
+        const foros = await Promise.all(rows.map(async (row) => {
+            const noticia = formatearFront(row);
+            const comments = await dbQuery.all(`
+                SELECT c.*, COALESCE(u.nombre, 'Ciudadano Anónimo') as usuario_nombre, 
+                COALESCE(u.foto_perfil, '/img/avatar-anonimo.jpg') as foto_perfil 
+                FROM comentarios c 
+                LEFT JOIN usuarios u ON c.user_id = u.id 
+                WHERE noticia_id = ? 
+                ORDER BY c.fecha DESC LIMIT 3
+            `, [row.id]);
+            
+            // Valoración promedio para la "Barra de Vida"
+            const val = await dbQuery.get('SELECT AVG(puntos) as promedio FROM valoraciones WHERE noticia_id = ?', [row.id]);
+            noticia.promedio_valoracion = val.promedio || 3;
+            noticia.comentarios_destacados = comments;
+            return noticia;
+        }));
+
+        res.json(foros);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
