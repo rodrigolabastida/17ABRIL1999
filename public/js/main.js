@@ -50,33 +50,39 @@ async function loadArticleBySlug(slug) {
 }
 
 function renderArticleDetail(noticia) {
-    // Scroll al inicio e inicio limpio
+    // DESBLOQUEO TOTAL DE SCROLL (Fuerza Bruta v9.5)
     window.scrollTo(0, 0);
-    document.body.style.overflow = 'auto'; 
+    document.body.style.overflow = 'visible';
+    document.documentElement.style.overflow = 'visible';
+    document.body.style.height = 'auto';
+    document.documentElement.style.height = 'auto';
     
-    // Ocultar elementos globales
-    document.querySelectorAll('.top-bar, .top-nav, .bottom-nav').forEach(el => el.style.display = 'none');
+    // Ocultar elementos globales y limpiar modales residuales
+    document.querySelectorAll('.top-bar, .top-nav, .bottom-nav, .modal-overlay, .full-modal').forEach(el => {
+        el.style.display = 'none';
+        el.classList.add('hidden');
+    });
 
     const mainContainer = document.querySelector('main') || document.body;
     
     const pct = Math.round((noticia.puntuacion || 3) / 5 * 100);
     const barCol = (noticia.puntuacion || 3) >= 4 ? '#22C55E' : '#FFCC00';
 
-    // Usamos un contenedor relativo estándar para que el body lo scrollee
+    // Usamos posicionamiento relativo y forzamos altura automática
     mainContainer.innerHTML = `
-        <div class="news-page-container" style="background:var(--bg); width:100%; min-height:100vh; position:relative; z-index:100; padding-bottom:80px; display:block;">
-            <nav style="padding:15px; background:rgba(18,18,18,0.95); backdrop-filter:blur(15px); position:sticky; top:0; border-bottom:1px solid #333; display:flex; align-items:center; z-index:1001;">
+        <div class="news-page-container" style="background:var(--bg-main); width:100%; min-height:100vh; height:auto; position:relative; z-index:9000; padding-bottom:100px; display:block;">
+            <nav style="padding:15px; background:rgba(18,18,18,0.95); backdrop-filter:blur(15px); position:sticky; top:0; border-bottom:1px solid #333; display:flex; align-items:center; z-index:9001;">
                 <a href="/" style="color:#fff; font-size:32px; text-decoration:none; display:flex; align-items:center;"><i class='bx bx-chevron-left'></i></a>
                 <span style="font-weight:800; font-size:18px; margin-left:10px;">Noticia en Vivo</span>
             </nav>
             
             <img src="${noticia.imageUrl}" style="width:100%; height:320px; object-fit:cover; display:block;" onerror="this.src='/img/placeholder-noticia.jpg';">
-            <div style="padding:25px;">
+            <div style="padding:25px; color:#fff;">
                 <span style="color:var(--accent); font-weight:800; font-size:12px; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:12px; display:block;">${noticia.source}</span>
                 <h1 style="font-size:28px; font-weight:800; margin-bottom:18px; line-height:1.2; letter-spacing:-0.5px;">${noticia.title}</h1>
                 <p style="color:var(--text-sec); font-size:17px; margin-bottom:30px; line-height:1.7;">${noticia.summary}</p>
                 
-                <a href="${noticia.link}" class="btn-primary" style="display:block; text-align:center; text-decoration:none; margin-bottom:40px; padding:18px; font-size:17px; border-radius:15px; box-shadow:0 10px 30px rgba(255,204,0,0.2);">VER NOTA COMPLETA</a>
+                <a href="${noticia.link}" class="btn-primary" style="display:block; text-align:center; text-decoration:none; margin-bottom:40px; padding:18px; font-size:17px; border-radius:15px; box-shadow:0 10px 30px rgba(255,204,0,0.2); color:#000;">VER NOTA COMPLETA</a>
 
                 <div class="card" style="margin-bottom:25px; padding:25px; background:#1C1C1E; border-radius:20px; border:1px solid #333;">
                     <h3 style="font-size:19px; font-weight:800; margin-bottom:18px; display:flex; align-items:center; gap:10px;"><i class='bx bxs-check-shield' style="color:var(--accent); font-size:24px;"></i> Confiabilidad Intlax</h3>
