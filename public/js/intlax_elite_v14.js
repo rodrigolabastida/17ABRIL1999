@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('%c 🚀 Intlax v20.0 ACTIVO - Optimización Total ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
+    console.log('%c 🚀 Intlax v21.0 ACTIVO - Navegación Fantasma ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
     
     // El Router toma el control total si estamos en una noticia
     const isArticle = await handleRouting();
@@ -104,10 +104,9 @@ async function handleRouting() {
 }
 
 async function loadArticleBySlug(slug) {
-    // Timeout de seguridad: Si en 4 segundos no hay nada, quitamos el preloader
-    const safetyTimeout = setTimeout(() => {
-        if(window.hidePreloader) window.hidePreloader();
-    }, 4000);
+    // ELIMINACIÓN DE PRELOADER EN NOTICIAS (v21.0)
+    // Lo ocultamos de inmediato para que la transición sea transparente
+    if(window.hidePreloader) window.hidePreloader();
 
     try {
         const res = await fetch('/api/v1/feed');
@@ -116,25 +115,19 @@ async function loadArticleBySlug(slug) {
         let article = allArticles.find(a => a.slug === slug);
         
         if (!article) {
-            console.log('🔍 Noticia profunda detectada, consultando API...');
             const res2 = await fetch('/api/v1/noticias/' + slug);
             const data2 = await res2.json();
             if (data2 && data2.noticia) article = data2.noticia;
         }
 
         if (article) {
-            clearTimeout(safetyTimeout);
             renderArticleDetail(article);
         } else {
             console.error('❌ Noticia no encontrada.');
-            clearTimeout(safetyTimeout);
-            if(window.hidePreloader) window.hidePreloader();
             window.location.href = '/';
         }
     } catch (e) { 
         console.error('Error en routing:', e);
-        clearTimeout(safetyTimeout);
-        if(window.hidePreloader) window.hidePreloader();
     }
 }
 
