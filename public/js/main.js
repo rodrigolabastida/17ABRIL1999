@@ -50,12 +50,11 @@ async function loadArticleBySlug(slug) {
 }
 
 function renderArticleDetail(noticia) {
-    document.body.style.overflow = 'hidden'; // Evitar scroll doble
+    // Liberamos el body pero mantenemos la capa encima
+    document.body.style.overflow = 'hidden'; 
     
-    // Ocultar elementos globales para modo inmersivo
-    document.querySelector('.top-bar').style.display = 'none';
-    document.querySelector('.top-nav').style.display = 'none';
-    document.querySelector('.bottom-nav').style.display = 'none';
+    // Ocultar elementos globales
+    document.querySelectorAll('.top-bar, .top-nav, .bottom-nav').forEach(el => el.style.display = 'none');
 
     const mainContainer = document.querySelector('main') || document.body;
     
@@ -63,31 +62,33 @@ function renderArticleDetail(noticia) {
     const barCol = (noticia.puntuacion || 3) >= 4 ? '#22C55E' : '#FFCC00';
 
     mainContainer.innerHTML = `
-        <div class="news-page-container" style="background:var(--bg); min-height:100vh; position:fixed; top:0; left:0; width:100%; z-index:10000; overflow-y:auto; padding-bottom:60px; -webkit-overflow-scrolling:touch;">
+        <div class="news-page-container" style="background:var(--bg); position:fixed; top:0; left:0; right:0; bottom:0; z-index:10000; overflow-y:scroll; -webkit-overflow-scrolling:touch; display:block;">
             <nav style="padding:15px; background:rgba(18,18,18,0.95); backdrop-filter:blur(15px); position:sticky; top:0; border-bottom:1px solid #333; display:flex; align-items:center; z-index:10001;">
                 <a href="/" style="color:#fff; font-size:32px; text-decoration:none; display:flex; align-items:center;"><i class='bx bx-chevron-left'></i></a>
                 <span style="font-weight:800; font-size:18px; margin-left:10px;">Noticia en Vivo</span>
             </nav>
-            <img src="${noticia.imageUrl}" style="width:100%; height:320px; object-fit:cover; display:block;" onerror="this.src='/img/placeholder-noticia.jpg';">
-            <div style="padding:25px;">
-                <span style="color:var(--accent); font-weight:800; font-size:12px; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:12px; display:block;">${noticia.source}</span>
-                <h1 style="font-size:28px; font-weight:800; margin-bottom:18px; line-height:1.2; letter-spacing:-0.5px;">${noticia.title}</h1>
-                <p style="color:var(--text-sec); font-size:17px; margin-bottom:30px; line-height:1.7;">${noticia.summary}</p>
-                
-                <a href="${noticia.link}" class="btn-primary" style="display:block; text-align:center; text-decoration:none; margin-bottom:40px; padding:18px; font-size:17px; border-radius:15px; box-shadow:0 10px 30px rgba(255,204,0,0.2);">VER NOTA COMPLETA</a>
+            <div class="scroll-content" style="min-height:101%; padding-bottom:100px;">
+                <img src="${noticia.imageUrl}" style="width:100%; height:320px; object-fit:cover; display:block;" onerror="this.src='/img/placeholder-noticia.jpg';">
+                <div style="padding:25px;">
+                    <span style="color:var(--accent); font-weight:800; font-size:12px; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:12px; display:block;">${noticia.source}</span>
+                    <h1 style="font-size:28px; font-weight:800; margin-bottom:18px; line-height:1.2; letter-spacing:-0.5px;">${noticia.title}</h1>
+                    <p style="color:var(--text-sec); font-size:17px; margin-bottom:30px; line-height:1.7;">${noticia.summary}</p>
+                    
+                    <a href="${noticia.link}" class="btn-primary" style="display:block; text-align:center; text-decoration:none; margin-bottom:40px; padding:18px; font-size:17px; border-radius:15px; box-shadow:0 10px 30px rgba(255,204,0,0.2);">VER NOTA COMPLETA</a>
 
-                <div class="card" style="margin-bottom:25px; padding:25px; background:#1C1C1E; border-radius:20px; border:1px solid #333;">
-                    <h3 style="font-size:19px; font-weight:800; margin-bottom:18px; display:flex; align-items:center; gap:10px;"><i class='bx bxs-check-shield' style="color:var(--accent); font-size:24px;"></i> Confiabilidad Intlax</h3>
-                    <div style="height:14px; background:#333; border-radius:7px; overflow:hidden; margin-bottom:12px;">
-                        <div style="width:${pct}%; height:100%; background:${barCol}; box-shadow: 0 0 15px ${barCol}66;"></div>
+                    <div class="card" style="margin-bottom:25px; padding:25px; background:#1C1C1E; border-radius:20px; border:1px solid #333;">
+                        <h3 style="font-size:19px; font-weight:800; margin-bottom:18px; display:flex; align-items:center; gap:10px;"><i class='bx bxs-check-shield' style="color:var(--accent); font-size:24px;"></i> Confiabilidad Intlax</h3>
+                        <div style="height:14px; background:#333; border-radius:7px; overflow:hidden; margin-bottom:12px;">
+                            <div style="width:${pct}%; height:100%; background:${barCol}; box-shadow: 0 0 15px ${barCol}66;"></div>
+                        </div>
+                        <p style="font-size:14px; color:var(--text-sec); font-weight:600;">Puntaje: ${noticia.puntuacion || 3} de 5 Estrellas</p>
                     </div>
-                    <p style="font-size:14px; color:var(--text-sec); font-weight:600;">Puntaje: ${noticia.puntuacion || 3} de 5 Estrellas</p>
-                </div>
 
-                <div class="card" style="padding:25px; background:#1C1C1E; border-radius:20px; border:1px solid #333; margin-bottom:50px;">
-                    <h3 style="font-size:19px; font-weight:800; margin-bottom:18px; display:flex; align-items:center; gap:10px;"><i class='bx bxs-group' style="color:var(--accent); font-size:24px;"></i> Comunidad</h3>
-                    <div id="comments-router-box">
-                        <p style="color:#666; font-size:14px; text-align:center; padding:20px;">Cargando comentarios...</p>
+                    <div class="card" style="padding:25px; background:#1C1C1E; border-radius:20px; border:1px solid #333;">
+                        <h3 style="font-size:19px; font-weight:800; margin-bottom:18px; display:flex; align-items:center; gap:10px;"><i class='bx bxs-group' style="color:var(--accent); font-size:24px;"></i> Comunidad</h3>
+                        <div id="comments-router-box">
+                            <p style="color:#666; font-size:14px; text-align:center; padding:20px;">Cargando comentarios...</p>
+                        </div>
                     </div>
                 </div>
             </div>
