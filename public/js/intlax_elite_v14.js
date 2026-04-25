@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('%c 🚀 Intlax v1.46 ACTIVO - Navegación Blindada ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
+    console.log('%c 🚀 Intlax v1.5 ACTIVO - In-App Viewer Mode ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
     
     // El Router toma el control total si estamos en una noticia
     const isArticle = await handleRouting();
@@ -164,10 +164,10 @@ function renderArticleDetail(noticia) {
                 <h1 style="font-size:28px; font-weight:800; margin-bottom:18px; line-height:1.2; letter-spacing:-0.5px;">${noticia.title}</h1>
                 <p style="color:var(--text-sec); font-size:17px; margin-bottom:30px; line-height:1.7;">${noticia.summary}</p>
                 
-                <a href="${noticia.link}" class="btn-primary" style="display:block; text-align:center; text-decoration:none; margin-bottom:15px; padding:18px; font-size:17px; border-radius:15px; box-shadow:0 10px 30px rgba(255,204,0,0.2); color:#000;">VER NOTA COMPLETA</a>
+                <button onclick="openInAppBrowser('${noticia.link}')" class="btn-primary" style="width:100%; display:block; text-align:center; border:none; margin-bottom:15px; padding:18px; font-size:17px; border-radius:15px; box-shadow:0 10px 30px rgba(255,204,0,0.2); color:#000; font-weight:800; cursor:pointer;">VER NOTA COMPLETA</button>
                 
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:40px;">
-                    <button onclick="shareArticle('${noticia.title.replace(/'/g, "\\'")}', '${noticia.link}')" class="btn-secondary" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:15px; border-radius:12px; font-size:15px; font-weight:700;">
+                    <button onclick="shareArticle('${noticia.title.replace(/'/g, "\\'")}', window.location.origin + '/noticias/${noticia.slug}')" class="btn-secondary" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:15px; border-radius:12px; font-size:15px; font-weight:700;">
                         <i class='bx bx-share-alt'></i> Compartir
                     </button>
                     <button id="save-btn-${noticia.id}" onclick="toggleFavorite('${noticia.id}')" class="btn-secondary" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:15px; border-radius:12px; font-size:15px; font-weight:700;">
@@ -427,7 +427,6 @@ function renderFeed(noticias) {
     let feedHTML = '';
     
     noticias.forEach((noticia, index) => {
-        // Alternamos algunas tarjetas para dar dinamismo (opcional, por ahora mantenemos consistencia premium)
         feedHTML += `
             <a href="/noticias/${noticia.slug}" class="news-card-link" style="text-decoration:none; color:inherit;">
                 <article class="news-card" data-id="${noticia.id}" style="animation-delay: ${index * 0.05}s">
@@ -442,7 +441,7 @@ function renderFeed(noticias) {
                                 <span>${(noticia.views/1000).toFixed(1)}K lecturas</span>
                             </div>
                             <div class="news-actions">
-                                <i class='bx bx-share-alt' onclick="event.preventDefault(); shareArticle('${noticia.title.replace(/'/g, "\\'")}', '${noticia.link}')"></i>
+                                <i class='bx bx-share-alt' onclick="event.preventDefault(); shareArticle('${noticia.title.replace(/'/g, "\\'")}', window.location.origin + '/noticias/${noticia.slug}')"></i>
                             </div>
                         </div>
                     </div>
@@ -748,3 +747,32 @@ async function postQuickComment(noticiaId) {
 }
 window.postQuickComment = postQuickComment;
 window.renderForosView = renderForosView;
+
+// --- LÓGICA DE VISOR IN-APP (v1.5) ---
+window.openInAppBrowser = function(url) {
+    const modal = document.getElementById('iframe-modal');
+    const iframe = document.getElementById('news-iframe');
+    
+    if (!modal || !iframe) return;
+
+    // Mostrar modal
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden'; 
+
+    // Inyectar URL
+    iframe.src = url;
+    
+    console.log('🌐 Cargando visor in-app para:', url);
+};
+
+// Configurar cierre del visor
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('close-iframe-btn')?.addEventListener('click', () => {
+        const modal = document.getElementById('iframe-modal');
+        const iframe = document.getElementById('news-iframe');
+        
+        if (modal) modal.classList.add('hidden');
+        if (iframe) iframe.src = 'about:blank'; 
+        document.body.style.overflow = '';
+    });
+});

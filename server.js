@@ -638,6 +638,15 @@ app.get('/noticias/:slug', async (req, res) => {
         <h1 class="article-title">${noticia.titulo}</h1>
         <p class="article-summary">${noticia.resumen}</p>
         <a href="${noticia.linkOriginal}" class="main-btn">VER NOTA COMPLETA</a>
+        
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:30px;">
+            <button onclick="shareThis()" class="main-btn" style="margin-bottom:0; background:#222; color:#fff; border:1px solid #444;">
+                <i class='bx bx-share-alt'></i> Compartir
+            </button>
+            <a href="/" class="main-btn" style="margin-bottom:0; background:#222; color:#fff; border:1px solid #444; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <i class='bx bx-home-alt'></i> Inicio
+            </a>
+        </div>
 
         <div class="section-card">
             <h3 class="section-title"><i class='bx bxs-check-shield' style="color:var(--accent)"></i> Confiabilidad Ciudadana</h3>
@@ -703,6 +712,16 @@ app.get('/noticias/:slug', async (req, res) => {
             } else {
                 const err = await r.json();
                 alert(err.error === 'Login necesario' ? 'Inicia sesión para votar' : err.error);
+            }
+        }
+
+        function shareThis() {
+            const title = '${noticia.titulo.replace(/'/g, "\\'")}';
+            const url = window.location.origin + '/noticias/${noticia.slug}';
+            if (navigator.share) {
+                navigator.share({ title, url });
+            } else {
+                navigator.clipboard.writeText(url).then(() => alert('Enlace copiado al portapapeles'));
             }
         }
     </script>
