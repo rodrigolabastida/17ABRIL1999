@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('🚀 Intlax v10.6 ACTIVO - Carrusel Blindado');
+    console.log('🚀 Intlax v11.7 ACTIVO - Carrusel con Arrastre');
     
     // El Router toma el control total si estamos en una noticia
     const isArticle = await handleRouting();
@@ -17,7 +17,48 @@ document.addEventListener('DOMContentLoaded', async () => {
     checkLocationPermission();
     setupBottomNav();
     checkUserSession();
+    setupDragScroll(); // <--- Nueva función de arrastre
 });
+
+function setupDragScroll() {
+    const slider = document.getElementById('hero-container');
+    if(!slider) return;
+
+    let isDown = false;
+    let startDate;
+    let startX;
+    let scrollLeft;
+
+    slider.style.cursor = 'grab';
+
+    slider.addEventListener('mousedown', (e) => {
+        isDown = true;
+        slider.style.cursor = 'grabbing';
+        slider.style.scrollSnapType = 'none'; // Desactivamos snap temporalmente para arrastre suave
+        startX = e.pageX - slider.offsetLeft;
+        scrollLeft = slider.scrollLeft;
+        startDate = new Date();
+    });
+
+    slider.addEventListener('mouseleave', () => {
+        isDown = false;
+        slider.style.cursor = 'grab';
+    });
+
+    slider.addEventListener('mouseup', () => {
+        isDown = false;
+        slider.style.cursor = 'grab';
+        slider.style.scrollSnapType = 'x mandatory'; // Reactivamos snap
+    });
+
+    slider.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        e.preventDefault();
+        const x = e.pageX - slider.offsetLeft;
+        const walk = (x - startX) * 2; // Velocidad de arrastre
+        slider.scrollLeft = scrollLeft - walk;
+    });
+}
 
 // Router Inteligente para detectar si estamos en una noticia
 async function handleRouting() {
