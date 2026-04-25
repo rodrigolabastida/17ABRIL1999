@@ -104,30 +104,38 @@ async function handleRouting() {
 }
 
 async function loadArticleBySlug(slug) {
+    // Timeout de seguridad: Si en 4 segundos no hay nada, quitamos el preloader
+    const safetyTimeout = setTimeout(() => {
+        if(window.hidePreloader) window.hidePreloader();
+    }, 4000);
+
     try {
         const res = await fetch('/api/v1/feed');
         const data = await res.json();
         const allArticles = [data.noticiaPrincipal, ...data.noticiasSecundarias];
         let article = allArticles.find(a => a.slug === slug);
         
-        // Si no está en el TOP de la portada, la buscamos por su propio canal
         if (!article) {
-            console.log('🔍 Noticia no está en el Top, buscando en el servidor...');
+            console.log('🔍 Noticia profunda detectada, consultando API...');
             const res2 = await fetch('/api/v1/noticias/' + slug);
             const data2 = await res2.json();
-            if (data2 && data2.noticia) {
-                article = data2.noticia;
-            }
+            if (data2 && data2.noticia) article = data2.noticia;
         }
 
         if (article) {
-            console.log('✅ Noticia encontrada, inyectando vista...');
+            clearTimeout(safetyTimeout);
             renderArticleDetail(article);
         } else {
-            console.error('❌ Noticia no encontrada en ninguna parte.');
-            window.location.href = '/'; // Fallback a inicio
+            console.error('❌ Noticia no encontrada.');
+            clearTimeout(safetyTimeout);
+            if(window.hidePreloader) window.hidePreloader();
+            window.location.href = '/';
         }
-    } catch (e) { console.error('Error en routing:', e); }
+    } catch (e) { 
+        console.error('Error en routing:', e);
+        clearTimeout(safetyTimeout);
+        if(window.hidePreloader) window.hidePreloader();
+    }
 }
 
 function renderArticleDetail(noticia) {
@@ -207,6 +215,11 @@ function renderArticleDetail(noticia) {
         </div>
     `;
     fetchCommentsForRouter(noticia.id);
+    
+    // LIBERACIÓN: Quitar preloader al finalizar el dibujo
+    setTimeout(() => {
+        if(window.hidePreloader) window.hidePreloader();
+    }, 100);
 }
 
 async function votarApp(noticiaId, puntos) {
