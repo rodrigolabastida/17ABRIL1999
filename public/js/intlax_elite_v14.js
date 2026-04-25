@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('%c 🚀 Intlax v2.2 ACTIVO - Blindaje Hostinger ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
+    console.log('%c 🚀 Intlax v2.3 ACTIVO - Geovisión Cinematográfica ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
     localStorage.removeItem('intlax_loc_pref'); // Limpieza de rastro de versiones viejas
     
     // El Router toma el control total si estamos en una noticia
@@ -784,92 +784,99 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// --- LÓGICA DE BÚSQUEDA GEO PREMIUM (v2.0) ---
+// --- LÓGICA DE BÚSQUEDA GEO PREMIUM (v2.2) ---
 async function triggerGeoSearch() {
     const overlay = document.getElementById('geo-search-overlay');
     const statusVal = document.getElementById('geo-status-val');
     const locVal = document.getElementById('geo-loc-val');
     const mainTitle = document.getElementById('geo-main-title');
     const mainDesc = document.getElementById('geo-main-desc');
+    const errorActions = document.getElementById('geo-error-actions');
     const inputBusqueda = document.getElementById('input-busqueda');
 
     if (!overlay) return;
 
-    // 1. Mostrar Overlay con fade-in
-    overlay.classList.remove('hidden');
-    overlay.style.opacity = '0';
-    setTimeout(() => overlay.style.opacity = '1', 10);
+    // 1. Mostrar Overlay con escalado suave y ocultar barras UI
+    overlay.classList.add('active');
+    document.querySelectorAll('.top-bar, .bottom-nav').forEach(el => el.style.transform = 'translateY(100%)');
+    if(document.querySelector('.top-bar')) document.querySelector('.top-bar').style.transform = 'translateY(-100%)';
 
-    // Reiniciar textos
-    statusVal.innerText = 'INICIANDO...';
+    // Reiniciar interfaz
+    statusVal.innerText = 'BUSCANDO SEÑAL...';
     locVal.innerText = 'DETECTANDO...';
     mainTitle.innerText = 'Buscando Noticias';
-    mainDesc.innerText = 'Sincronizando con satélites locales...';
+    mainDesc.innerText = 'Enlazando con el sistema de geovisión local.';
+    errorActions.classList.add('hidden');
 
-    // Función para crear partículas de "noticias encontradas"
     const spawnParticle = () => {
         const p = document.createElement('div');
         p.className = 'geo-dot';
         p.style.left = Math.random() * 100 + '%';
         p.style.top = Math.random() * 100 + '%';
-        const particlesContainer = document.getElementById('geo-particles');
-        if (particlesContainer) particlesContainer.appendChild(p);
+        const pc = document.getElementById('geo-particles');
+        if(pc) pc.appendChild(p);
         setTimeout(() => p.remove(), 2000);
     };
 
     try {
-        // 2. Obtener ubicación
-        statusVal.innerText = 'GEOLOCALIZANDO...';
+        // 2. Obtener ubicación con Feedback visual
+        statusVal.innerText = 'LOCALIZANDO GPS...';
         
         const position = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+            navigator.geolocation.getCurrentPosition(resolve, reject, { 
+                enableHighAccuracy: true,
+                timeout: 8000,
+                maximumAge: 0
+            });
         });
 
         const { latitude, longitude } = position.coords;
         locVal.innerText = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-        statusVal.innerText = 'SINCRONIZADO';
+        statusVal.innerText = 'SEÑAL BLOQUEADA';
         statusVal.classList.remove('pulse');
 
-        // 3. Simular escaneo de señales (Efecto visual WOW)
-        mainTitle.innerText = 'Escaneando área...';
-        mainDesc.innerText = 'Analizando tráfico de datos en Tlaxcala central.';
+        // 3. Secuencia de Escaneo Cinematográfica
+        mainTitle.innerText = 'Sincronizando Mapa';
+        mainDesc.innerText = 'Identificando focos de interés en Tlaxcala.';
         
-        for(let i=0; i<15; i++) {
-            await new Promise(r => setTimeout(r, 150));
+        for(let i=0; i<20; i++) {
+            await new Promise(r => setTimeout(r, 120));
             spawnParticle();
-            if(i === 5) mainDesc.innerText = 'Filtrando por relevancia ciudadana...';
-            if(i === 10) mainDesc.innerText = 'Calculando proximidad de incidentes...';
+            if(i === 7) mainDesc.innerText = 'Cruzando reportes de accidentes y política...';
+            if(i === 14) mainDesc.innerText = 'Filtrando noticias de última hora...';
         }
 
-        // 4. Ejecutar búsqueda real
+        // 4. Búsqueda y Resultados
         const term = inputBusqueda ? inputBusqueda.value : '';
         const res = await fetch(`/api/v1/search?q=${encodeURIComponent(term)}&lat=${latitude}&lng=${longitude}`);
         const data = await res.json();
 
-        // 5. Mostrar resultados y cerrar
-        mainTitle.innerText = '¡Señales encontradas!';
-        mainDesc.innerText = `Se han detectado ${data.resultados.length} noticias cerca de tu posición.`;
+        mainTitle.innerText = '¡Mapa Actualizado!';
+        mainDesc.innerText = `Se han detectado ${data.resultados.length} puntos de interés cercanos.`;
         
         await new Promise(r => setTimeout(r, 1500));
         
         renderSearchResults(data.resultados);
-        
-        // Cerrar overlay
-        overlay.style.opacity = '0';
-        setTimeout(() => {
-            overlay.classList.add('hidden');
-            // Hacer scroll hasta los resultados si es necesario
-            const resultsContainer = document.getElementById('contenedor-resultados-busqueda');
-            if (resultsContainer) resultsContainer.scrollIntoView({ behavior: 'smooth' });
-        }, 500);
+        closeGeoOverlay();
 
     } catch (error) {
         console.error('GeoSearch Error:', error);
-        statusVal.innerText = 'ERROR';
-        mainTitle.innerText = 'Error de Señal';
-        mainDesc.innerText = 'No pudimos acceder a tu ubicación. Por favor, activa los permisos de GPS.';
-        
-        await new Promise(r => setTimeout(r, 3000));
-        overlay.classList.add('hidden');
+        statusVal.innerText = 'ERROR DE VÍNCULO';
+        mainTitle.innerText = 'No pudimos localizarte';
+        mainDesc.innerText = 'La señal GPS es débil o no tenemos permisos. ¿Quieres buscar de todas formas?';
+        errorActions.classList.remove('hidden');
     }
 }
+
+window.retryGeoSearch = () => {
+    triggerGeoSearch();
+};
+
+window.closeGeoOverlay = () => {
+    const overlay = document.getElementById('geo-search-overlay');
+    if(!overlay) return;
+    
+    overlay.classList.remove('active');
+    // Restaurar Barras UI
+    document.querySelectorAll('.top-bar, .bottom-nav').forEach(el => el.style.transform = '');
+};

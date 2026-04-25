@@ -802,24 +802,37 @@ body {
 
 .btn-geo-premium {
     width: 100%;
-    margin-top: 15px;
-    padding: 16px;
-    background: linear-gradient(135deg, rgba(255, 204, 0, 0.15) 0%, rgba(20, 20, 22, 0.8) 100%);
-    border: 1px solid rgba(255, 204, 0, 0.3);
-    border-radius: 18px;
+    margin: 20px 0;
+    padding: 20px;
+    background: rgba(255, 204, 0, 0.03);
+    border: 1px solid rgba(255, 204, 0, 0.2);
+    border-radius: 20px;
     display: flex;
     align-items: center;
     gap: 15px;
     cursor: pointer;
-    backdrop-filter: blur(10px);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-geo-premium::before {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 150%; height: 150%;
+    background: radial-gradient(circle, rgba(255, 204, 0, 0.1) 0%, transparent 70%);
+    transform: translate(-50%, -50%) scale(0);
+    transition: transform 0.6s ease;
+}
+
+.btn-geo-premium:hover::before {
+    transform: translate(-50%, -50%) scale(1);
 }
 
 .btn-geo-premium:active {
-    transform: scale(0.97);
-    border-color: var(--accent);
-    background: linear-gradient(135deg, rgba(255, 204, 0, 0.25) 0%, rgba(20, 20, 22, 0.9) 100%);
+    transform: scale(0.98);
+    background: rgba(255, 204, 0, 0.08);
 }
 
 .geo-icon-wrapper {
@@ -864,18 +877,41 @@ body {
     font-size: 20px;
 }
 
-/* FULL SCREEN RADAR OVERLAY */
+/* FULL SCREEN MAP RADAR OVERLAY */
 .geo-overlay {
     position: fixed;
     inset: 0;
-    background: radial-gradient(circle at center, #101012 0%, #050506 100%);
-    z-index: 30000;
+    background: #0A0A0B;
+    z-index: 99999; /* Por encima de TODO */
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    transition: opacity 0.5s ease, visibility 0.5s;
+    transition: all 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+    opacity: 0;
+    visibility: hidden;
+}
+
+.geo-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.geo-map-bg {
+    position: absolute;
+    inset: 0;
+    background-image: url('/tlaxcala_cyberpunk_map.png');
+    background-size: cover;
+    background-position: center;
+    opacity: 0.3;
+    filter: saturate(1.5) brightness(0.8);
+    transform: scale(1.1);
+    transition: transform 10s ease;
+}
+
+.geo-overlay.active .geo-map-bg {
+    transform: scale(1);
 }
 
 .geo-grid-background {
@@ -981,16 +1017,37 @@ body {
 @keyframes blink { to { opacity: 0; } }
 
 #geo-main-title {
-    font-size: 24px;
+    font-size: 28px;
     font-weight: 800;
     color: #fff;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
+    text-shadow: 0 4px 20px rgba(0,0,0,0.8);
 }
 
 #geo-main-desc {
     color: var(--text-sec);
+    font-size: 16px;
+    max-width: 320px;
+    line-height: 1.5;
+}
+
+.geo-error-fallback {
+    margin-top: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.btn-geo-fallback {
+    background: var(--accent);
+    color: #000;
+    padding: 14px 24px;
+    border-radius: 12px;
+    font-weight: 800;
     font-size: 14px;
-    max-width: 280px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(255, 204, 0, 0.2);
 }
 
 .geo-particles {
