@@ -387,6 +387,51 @@ body {
     margin-top: 4px;
 }
 
+/* ------------------------------------- */
+/* ANIMACIONES Y PRELOADER               */
+/* ------------------------------------- */
+
+.logo-loader {
+    font-size: 48px;
+    font-weight: 800;
+    color: #FFFFFF;
+    letter-spacing: -1.5px;
+    margin-bottom: 15px;
+    animation: pulseLogo 2s infinite ease-in-out;
+}
+
+@keyframes pulseLogo {
+    0%, 100% { transform: scale(1); opacity: 0.8; filter: drop-shadow(0 0 0px var(--accent)); }
+    50% { transform: scale(1.05); opacity: 1; filter: drop-shadow(0 0 15px rgba(255,193,7,0.4)); }
+}
+
+.loader-bar-container {
+    width: 140px;
+    height: 3px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 0 auto;
+}
+
+.loader-bar {
+    width: 40%;
+    height: 100%;
+    background: var(--accent-gradient);
+    border-radius: 10px;
+    animation: loaderMove 1.5s infinite ease-in-out;
+}
+
+@keyframes loaderMove {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(300%); }
+}
+
+.preloader-hidden {
+    opacity: 0 !important;
+    visibility: hidden !important;
+}
+
 /* --- (Fin del archivo) --- */
 
 .top-bar {

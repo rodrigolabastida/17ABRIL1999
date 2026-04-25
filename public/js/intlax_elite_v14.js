@@ -257,6 +257,10 @@ async function fetchNews(params = '') {
         renderHeroCarousel(heroArticles);
         renderFeed(feedArticles);
         attachClickBindings();
+
+        // Ocultar preloader con clase suave
+        const preloader = document.getElementById('preloader');
+        if(preloader) preloader.classList.add('preloader-hidden');
     } catch (err) {
         console.error('Error cargando noticias:', err);
     }
