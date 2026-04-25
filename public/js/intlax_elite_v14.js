@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('🚀 Intlax v12.5 ACTIVO - Drag Maestro');
+    console.log('%c 🚀 Intlax v20.0 ACTIVO - Optimización Total ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
     
     // El Router toma el control total si estamos en una noticia
     const isArticle = await handleRouting();
