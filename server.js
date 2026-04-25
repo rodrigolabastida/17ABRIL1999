@@ -114,8 +114,12 @@ async function initDB() {
                 FOREIGN KEY (noticia_id) REFERENCES noticias(id),
                 FOREIGN KEY (user_id) REFERENCES usuarios(id)
             );
+            -- Índices de Alto Rendimiento
+            CREATE INDEX IF NOT EXISTS idx_slug ON noticias(slug);
+            CREATE INDEX IF NOT EXISTS idx_relevancia ON noticias(fecha_captura, puntuacion);
+            CREATE INDEX IF NOT EXISTS idx_vistas ON noticias(vistas);
         `);
-        console.log('✅ Tablas de base de datos verificadas.');
+        console.log('✅ Base de datos optimizada con índices de velocidad.');
     } catch (err) {
         console.error('❌ Error al inicializar tablas:', err.message);
     }
@@ -465,6 +469,6 @@ app.get('/noticias/:slug', async (req, res) => {
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public/home.html')));
 
 app.listen(PORT, () => {
-    console.log(`🚀 Intlax escuchando en puerto ${PORT}`);
-    setTimeout(fetchAllRssFeeds, 1000);
+    console.log(`🚀 Intlax ACTIVO en puerto ${PORT} - Iniciando con retardo de seguridad.`);
+    setTimeout(fetchAllRssFeeds, 30000); // 30 segundos de gracia para el arranque
 });
