@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard | Intlax</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <style>
+        :root { --accent: #FFCC00; --bg: #0A0A0B; --card: #141416; --text: #FFFFFF; --text-sec: #A0A0A0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .logo { font-size: 24px; font-weight: 800; color: var(--accent); }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px; }
+        .stat-card { background: var(--card); padding: 25px; border-radius: 20px; border: 1px solid #232326; text-align: center; }
+        .stat-value { font-size: 32px; font-weight: 800; display: block; margin-bottom: 5px; color: var(--accent); }
+        .stat-label { font-size: 12px; color: var(--text-sec); text-transform: uppercase; letter-spacing: 1px; }
+
+        .section { background: var(--card); border-radius: 24px; padding: 30px; border: 1px solid #232326; margin-bottom: 30px; }
+        .section-title { font-size: 20px; font-weight: 800; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { text-align: left; color: var(--text-sec); font-size: 12px; text-transform: uppercase; padding: 15px; border-bottom: 1px solid #232326; }
+        td { padding: 15px; border-bottom: 1px solid #232326; font-size: 14px; }
+        
+        .relevance-badge { background: rgba(255, 204, 0, 0.1); color: var(--accent); padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 12px; }
+        
+        .btn { background: var(--accent); color: #000; padding: 12px 24px; border-radius: 12px; font-weight: 800; text-decoration: none; display: inline-block; border: none; cursor: pointer; }
+        .btn-small { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
+        
+        #error-msg { background: #ef4444; color: #fff; padding: 20px; border-radius: 12px; display: none; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div id="error-msg">
+        <i class='bx bx-error-circle'></i> No tienes permisos para acceder o no has iniciado sesión.
+    </div>
+
+    <div id="admin-content" style="display:none;">
+        <header class="header">
+            <h1 class="logo">Intlax Admin</h1>
+            <button class="btn btn-small" onclick="location.href='/auth/logout'">Cerrar Sesión</button>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-value" id="stat-noticias">-</span>
+                <span class="stat-label">Noticias Totales</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value" id="stat-vistas">-</span>
+                <span class="stat-label">Vistas Totales</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value" id="stat-usuarios">-</span>
+                <span class="stat-label">Usuarios</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value" id="stat-comentarios">-</span>
+                <span class="stat-label">Comentarios</span>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title"><i class='bx bxs-hot' ></i> Top 5 Más Relevantes</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Título</th>
+                        <th>Vistas</th>
+                        <th>Comentarios</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="top-noticias">
+                    <!-- Dinámico -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        async function init() {
+            try {
+                const res = await fetch('/api/v1/admin/stats');
+                if (!res.ok) {
+                    document.getElementById('error-msg').style.display = 'block';
+                    return;
+                }
+                const data = await res.json();
+                document.getElementById('admin-content').style.display = 'block';
+                
+                // Stats
+                document.getElementById('stat-noticias').innerText = data.general.totalNoticias;
+                document.getElementById('stat-vistas').innerText = data.general.totalVistas || 0;
+                document.getElementById('stat-usuarios').innerText = data.general.totalUsuarios;
+                document.getElementById('stat-comentarios').innerText = data.general.totalComentarios;
+
+                // Top News
+                const tbody = document.getElementById('top-noticias');
+                tbody.innerHTML = data.masRelevantes.map(n => `
+                    <tr>
+                        <td>${n.titulo}</td>
+                        <td><i class='bx bx-show'></i> ${n.vistas}</td>
+                        <td><i class='bx bx-comment'></i> ${n.num_comentarios}</td>
+                        <td><button class="btn btn-small">Ver</button></td>
+                    </tr>
+                `).join('');
+
+            } catch (e) {
+                document.getElementById('error-msg').style.display = 'block';
+            }
+        }
+        init();
+    </script>
+</body>
+</html>

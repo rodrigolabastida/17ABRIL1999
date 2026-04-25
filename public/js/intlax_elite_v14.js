@@ -164,7 +164,8 @@ function renderArticleDetail(noticia) {
                 </div>
 
                 <div class="card" style="margin-bottom:25px; padding:25px; background:#1C1C1E; border-radius:20px; border:1px solid #333;">
-                    <h3 style="font-size:19px; font-weight:800; margin-bottom:18px; display:flex; align-items:center; gap:10px;"><i class='bx bxs-check-shield' style="color:var(--accent); font-size:24px;"></i> Confiabilidad Ciudadana</h3>
+                    <h3 style="font-size:19px; font-weight:800; margin-bottom:10px; display:flex; align-items:center; gap:10px;"><i class='bx bxs-check-shield' style="color:var(--accent); font-size:24px;"></i> Confiabilidad Ciudadana</h3>
+                    <p style="font-size:13px; color:var(--text-sec); margin-bottom:15px;">Pulsa una barra para calificar la nota:</p>
                     <div class="battery-container">
                         <div class="battery-bar" id="battery-rating" data-value="${Math.round(noticia.puntuacion || 3)}">
                             <div class="battery-segment" onclick="votarApp('${noticia.id}', 1)"></div>
@@ -197,22 +198,6 @@ function renderArticleDetail(noticia) {
     fetchCommentsForRouter(noticia.id);
 }
 
-async function postCommentApp(noticiaId) {
-    const t = document.getElementById('nc-router').value;
-    if(!t) return;
-    try {
-        const r = await fetch('/api/v1/comentar', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({noticia_id: noticiaId, comentario: t})
-        });
-        if(r.ok) {
-            document.getElementById('nc-router').value = '';
-            fetchCommentsForRouter(noticiaId);
-        }
-    } catch (e) { console.error('Error al comentar:', e); }
-}
-
 async function votarApp(noticiaId, puntos) {
     try {
         const r = await fetch('/api/v1/valorar', {
@@ -230,6 +215,24 @@ async function votarApp(noticiaId, puntos) {
         }
     } catch (e) { console.error('Error al votar:', e); }
 }
+window.votarApp = votarApp;
+
+async function postCommentApp(noticiaId) {
+    const t = document.getElementById('nc-router').value;
+    if(!t) return;
+    try {
+        const r = await fetch('/api/v1/comentar', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({noticia_id: noticiaId, comentario: t})
+        });
+        if(r.ok) {
+            document.getElementById('nc-router').value = '';
+            fetchCommentsForRouter(noticiaId);
+        }
+    } catch (e) { console.error('Error al comentar:', e); }
+}
+window.postCommentApp = postCommentApp;
 
 function shareArticle(title, url) {
     if (navigator.share) {

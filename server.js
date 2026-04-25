@@ -8,7 +8,7 @@ const sqlite3 = require('sqlite3').verbose();
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 process.on('uncaughtException', (err) => {
     console.error('❌ CRASH: Uncaught Exception:', err.message);
@@ -79,7 +79,8 @@ async function initDB() {
                 email TEXT,
                 foto_perfil TEXT,
                 puntos_reputacion INTEGER DEFAULT 0,
-                fecha_registro DATETIME DEFAULT (datetime('now'))
+                fecha_registro DATETIME DEFAULT (datetime('now')),
+                rol TEXT DEFAULT 'user'
             );
             CREATE TABLE IF NOT EXISTS noticias (
                 id TEXT PRIMARY KEY,
@@ -90,7 +91,7 @@ async function initDB() {
                 fuente TEXT,
                 fecha_publicacion DATETIME,
                 puntuacion INTEGER,
-                vistas INTEGER,
+                vistas INTEGER DEFAULT 0,
                 municipio TEXT,
                 lat REAL,
                 lng REAL,
@@ -330,12 +331,26 @@ let lastCacheTime = 0;
 app.get('/api/v1/feed', async (req, res) => {
     try {
         const ahora = Date.now();
-        // Si hay caché y tiene menos de 5 minutos, respondemos al instante
         if (cacheFeed && (ahora - lastCacheTime < 300000)) {
             return res.json(cacheFeed);
         }
 
-        const rows = await dbQuery.all(`SELECT * FROM noticias ORDER BY fecha_captura DESC LIMIT 31`);
+        // Algoritmo de Relevancia Dinámico:
+        // (Vistas + Comentarios * 20 + RatingPromedio * 50) dividido por tiempo transcurrido (Time Decay)
+        const rows = await dbQuery.all(`
+            SELECT *, 
+            (
+                (
+                    vistas + 
+                    (SELECT COUNT(*) FROM comentarios WHERE noticia_id = noticias.id) * 20 + 
+                    COALESCE((SELECT AVG(puntos) FROM valoraciones WHERE noticia_id = noticias.id), 0) * 50
+                ) * (CASE WHEN imageUrl IS NULL OR imageUrl = '' OR imageUrl LIKE '%placeholder%' THEN 0.01 ELSE 1.0 END)
+            ) / (julianday('now') - julianday(fecha_captura) + 0.1) as score
+            FROM noticias 
+            ORDER BY score DESC 
+            LIMIT 100
+        `);
+        
         if (!rows.length) return res.json({ noticiaPrincipal: null, noticiasSecundarias: [] });
         
         const articles = rows.map(formatearFront);
@@ -360,8 +375,12 @@ app.get('/api/v1/noticias/:slug', async (req, res) => {
         const noticia = await dbQuery.get('SELECT * FROM noticias WHERE slug = ?', [req.params.slug]);
         if (!noticia) {
             console.log(`⚠️ Noticia no encontrada en DB para slug: ${req.params.slug}. Rebotando a index.`);
-            return res.sendFile(path.join(__dirname, 'public/home.html'));
+            return res.status(404).json({ error: 'Noticia no encontrada' });
         }
+        
+        // Incrementar vistas
+        await dbQuery.run('UPDATE noticias SET vistas = vistas + 1 WHERE id = ?', [noticia.id]);
+        
         const val = await dbQuery.get('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?', [noticia.id]);
         const comments = await dbQuery.all('SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil FROM comentarios c JOIN usuarios u ON c.user_id = u.id WHERE noticia_id = ? ORDER BY fecha DESC', [noticia.id]);
         res.json({ noticia, valoracion: val, comentarios: comments, user: req.user || null });
@@ -449,7 +468,30 @@ app.get('/api/v1/favoritos', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Auth
+// Middleware Admin
+const isAdmin = (req, res, next) => {
+    if (req.isAuthenticated() && req.user.rol === 'admin') return next();
+    res.status(403).json({ error: 'Acceso restringido a administradores.' });
+};
+
+// API Admin
+app.get('/api/v1/admin/stats', isAdmin, async (req, res) => {
+    try {
+        const general = await dbQuery.get(`
+            SELECT 
+                (SELECT COUNT(*) FROM noticias) as totalNoticias,
+                (SELECT COUNT(*) FROM usuarios) as totalUsuarios,
+                (SELECT COUNT(*) FROM comentarios) as totalComentarios,
+                (SELECT SUM(vistas) FROM noticias) as totalVistas
+        `);
+        const masRelevantes = await dbQuery.all(`
+            SELECT titulo, vistas, 
+            (SELECT COUNT(*) FROM comentarios WHERE noticia_id = noticias.id) as num_comentarios
+            FROM noticias ORDER BY vistas DESC LIMIT 5
+        `);
+        res.json({ general, masRelevantes });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
 app.get('/auth/google', authConfigured, passport.authenticate('google', { scope: ['profile', 'email'] }));
 app.get('/auth/google/callback', authConfigured, passport.authenticate('google', { failureRedirect: '/' }), (req, res) => res.redirect('/'));
 app.get('/auth/logout', (req, res) => { req.logout(() => res.redirect('/')); });
@@ -541,6 +583,7 @@ app.get('/noticias/:slug', async (req, res) => {
 
         <div class="section-card">
             <h3 class="section-title"><i class='bx bxs-check-shield' style="color:var(--accent)"></i> Confiabilidad Ciudadana</h3>
+            <p style="font-size:13px; color:var(--text-sec); margin-bottom:15px;">Pulsa una barra para calificar la nota:</p>
             <div class="battery-container">
                 <div class="battery-bar" id="battery-rating" data-value="${Math.round(promedio)}">
                     <div class="battery-segment" onclick="votar(1)"></div>
