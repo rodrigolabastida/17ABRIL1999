@@ -498,13 +498,17 @@ body {
     display: none;
 }
 
+#hero-container > a {
+    flex-shrink: 0;
+    width: 88vw; /* Un poco más ancho para impacto visual */
+    scroll-snap-align: center;
+}
+
 .hero-card {
     position: relative;
-    width: 90vw; /* Takes most of the screen width */
-    flex-shrink: 0;
-    padding: 15px 12px;
+    width: 100%;
+    padding: 15px 8px;
     cursor: pointer;
-    scroll-snap-align: center;
 }
 
 .hero-img-wrapper {
