@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('%c 🚀 Intlax v1.5 ACTIVO - In-App Viewer Mode ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
+    console.log('%c 🚀 Intlax v1.51 ACTIVO - Geovisor bajo demanda ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
     
     // El Router toma el control total si estamos en una noticia
     const isArticle = await handleRouting();
@@ -14,10 +14,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Si no es artículo, flujo normal de portada
-    checkLocationPermission();
+    fetchNews(); // Carga inmediata de noticias generales
     setupBottomNav();
     checkUserSession();
     setupDragScroll();
+    setupGeoButton(); // Nueva función para el botón manual
 
     // Timeout de seguridad: Si en 4s no cargan las noticias, forzamos la entrada
     setTimeout(() => {
@@ -349,16 +350,34 @@ document.getElementById('btn-deny-loc').addEventListener('click', () => {
     fetchNews(); 
 });
 
+function setupGeoButton() {
+    const btn = document.getElementById('btn-geo-activate');
+    if (btn) {
+        btn.addEventListener('click', () => {
+            btn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Obteniendo ubicación...";
+            getLocationAndFetch();
+        });
+    }
+}
+
 function getLocationAndFetch() {
-    if (navigator.geolocation && !currentGeoPolled) {
-        currentGeoPolled = true; 
+    const btn = document.getElementById('btn-geo-activate');
+    if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const lat = position.coords.latitude;
                 const lng = position.coords.longitude;
+                if (btn) {
+                    btn.innerHTML = "<i class='bx bxs-map-pin' style='color:var(--accent);'></i> Noticias cercanas activas";
+                    btn.style.background = "rgba(255,204,0,0.1)";
+                    btn.style.borderColor = "var(--accent)";
+                }
                 fetchNews('?lat=' + lat + '&lng=' + lng);
             },
-            () => fetchNews()
+            () => {
+                if (btn) btn.innerHTML = "<i class='bx bx-compass'></i> Ver noticias cerca de mí";
+                fetchNews();
+            }
         );
     } else {
         fetchNews();

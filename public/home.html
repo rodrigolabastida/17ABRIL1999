@@ -68,7 +68,7 @@
     <header class="top-bar">
         <div style="display:flex; align-items:baseline; gap:6px;">
             <h1 class="logo">Intlax</h1>
-            <span style="font-size:9px; color:#555; font-weight:700; letter-spacing:0.5px; opacity:0.6;">v1.46</span>
+            <span style="font-size:9px; color:#555; font-weight:700; letter-spacing:0.5px; opacity:0.6;">v1.51</span>
         </div>
         <div class="top-bar-icons">
             <div class="notification-icon">
@@ -88,6 +88,13 @@
         <div id="feed-view">
             <div id="hero-container">
                 <!-- Inyectado dinámicamente por JS -->
+            </div>
+
+            <div id="geo-activation-bar" style="padding:0 20px 15px 20px;">
+                <button id="btn-geo-activate" style="width:100%; padding:14px; background:linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%); border:1px solid rgba(255,255,255,0.1); border-radius:15px; color:#fff; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:10px; cursor:pointer; backdrop-filter:blur(10px);">
+                    <i class='bx bx-compass' style="color:var(--accent); font-size:18px;"></i>
+                    Ver noticias cerca de mí
+                </button>
             </div>
 
             <div id="feed-container" class="feed-list">
@@ -172,17 +179,7 @@
         </div>
     </nav>
 
-    <!-- Modal Geolocation -->
-    <div id="location-modal-overlay" class="modal-overlay hidden">
-        <div class="location-modal">
-            <h3>📍 Mejoramos tu experiencia</h3>
-            <p>Para mostrarte las noticias más relevantes que ocurren cerca de ti, necesitamos tu ubicación.</p>
-            <div class="modal-buttons">
-                <button id="btn-deny-loc" class="btn-secondary">Ahora no</button>
-                <button id="btn-allow-loc" class="btn-primary">Permitir</button>
-            </div>
-        </div>
-    </div>
+    <!-- El modal de ubicación ha sido sustituido por el botón de activación manual en el feed v1.51 -->
 
     <!-- Modal Resumen In-App -->
     <div id="article-summary-modal" class="full-modal hidden">
