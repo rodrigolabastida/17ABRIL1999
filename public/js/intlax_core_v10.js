@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('🚀 Intlax v10.0 ACTIVO - Sistema Maestro de Scroll Natural');
+    console.log('🚀 Intlax v10.6 ACTIVO - Carrusel Blindado');
     
     // El Router toma el control total si estamos en una noticia
     const isArticle = await handleRouting();
@@ -202,22 +202,28 @@ async function fetchNews(params = '') {
 }
 
 function renderHeroCarousel(noticias) {
-    if(!noticias || noticias.length === 0) return;
     const heroContainer = document.getElementById('hero-container');
+    if(!noticias || noticias.length === 0 || !noticias[0]) {
+        console.warn('⚠️ No hay noticias para el carrusel, intentando recarga...');
+        heroContainer.innerHTML = '<div style="padding:20px; color:#666;">Cargando carrusel...</div>';
+        return;
+    }
+    
+    // Filtramos posibles noticias nulas
+    const validas = noticias.filter(n => n && n.title);
     
     let carouselHTML = '';
-    noticias.forEach(noticia => {
+    validas.forEach(noticia => {
         carouselHTML += `
             <a href="/noticias/${noticia.slug}" class="hero-card-link" style="text-decoration:none; color:inherit;">
                 <div class="hero-card" data-id="${noticia.id}">
-                    <div class="hero-img-wrapper">
-                        <img src="${noticia.imageUrl}" alt="${noticia.title}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
-                        <div class="hero-gradient">
-                            <div class="hero-meta">
-                                <span class="tag">${noticia.source}</span>
-                                <span>• Exclusivo Intlax</span>
+                    <div class="hero-img-wrapper" style="background:#1a1a1c;">
+                        <img src="${noticia.imageUrl}" alt="${noticia.title}" style="width:100%; height:100%; object-fit:cover;" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
+                        <div class="hero-gradient" style="position:absolute; inset:0; background:linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 70%); padding:15px; display:flex; flex-direction:column; justify-content:flex-end;">
+                            <div class="hero-meta" style="margin-bottom:8px;">
+                                <span class="tag" style="color:var(--accent); font-weight:800; font-size:11px;">${noticia.source}</span>
                             </div>
-                            <h2 class="hero-title">${noticia.title}</h2>
+                            <h2 class="hero-title" style="font-size:18px; font-weight:800; color:#fff; line-height:1.2;">${noticia.title}</h2>
                         </div>
                     </div>
                 </div>

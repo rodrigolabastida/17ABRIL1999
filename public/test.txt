@@ -1,1 +1,0 @@
-ACTIVADO: Intlax v10 funcionando correctamente. Si ves esto, estamos en la carpeta correcta pero Hostinger tiene cache agresivo en el HTML.
