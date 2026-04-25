@@ -143,14 +143,33 @@ function renderArticleDetail(noticia) {
                 <h1 style="font-size:28px; font-weight:800; margin-bottom:18px; line-height:1.2; letter-spacing:-0.5px;">${noticia.title}</h1>
                 <p style="color:var(--text-sec); font-size:17px; margin-bottom:30px; line-height:1.7;">${noticia.summary}</p>
                 
-                <a href="${noticia.link}" class="btn-primary" style="display:block; text-align:center; text-decoration:none; margin-bottom:40px; padding:18px; font-size:17px; border-radius:15px; box-shadow:0 10px 30px rgba(255,204,0,0.2); color:#000;">VER NOTA COMPLETA</a>
+                <a href="${noticia.link}" class="btn-primary" style="display:block; text-align:center; text-decoration:none; margin-bottom:15px; padding:18px; font-size:17px; border-radius:15px; box-shadow:0 10px 30px rgba(255,204,0,0.2); color:#000;">VER NOTA COMPLETA</a>
+                
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:40px;">
+                    <button onclick="shareArticle('${noticia.title.replace(/'/g, "\\'")}', '${noticia.link}')" class="btn-secondary" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:15px; border-radius:12px; font-size:15px; font-weight:700;">
+                        <i class='bx bx-share-alt'></i> Compartir
+                    </button>
+                    <button id="save-btn-${noticia.id}" onclick="toggleFavorite('${noticia.id}')" class="btn-secondary" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:15px; border-radius:12px; font-size:15px; font-weight:700;">
+                        <i class='bx bx-bookmark'></i> Guardar
+                    </button>
+                </div>
 
                 <div class="card" style="margin-bottom:25px; padding:25px; background:#1C1C1E; border-radius:20px; border:1px solid #333;">
-                    <h3 style="font-size:19px; font-weight:800; margin-bottom:18px; display:flex; align-items:center; gap:10px;"><i class='bx bxs-check-shield' style="color:var(--accent); font-size:24px;"></i> Confiabilidad Intlax</h3>
-                    <div style="height:14px; background:#333; border-radius:7px; overflow:hidden; margin-bottom:12px;">
-                        <div style="width:${pct}%; height:100%; background:${barCol}; box-shadow: 0 0 15px ${barCol}66;"></div>
+                    <h3 style="font-size:19px; font-weight:800; margin-bottom:18px; display:flex; align-items:center; gap:10px;"><i class='bx bxs-check-shield' style="color:var(--accent); font-size:24px;"></i> Confiabilidad Ciudadana</h3>
+                    <div class="battery-container">
+                        <div class="battery-bar" id="battery-rating" data-value="${Math.round(noticia.puntuacion || 3)}">
+                            <div class="battery-segment" onclick="votarApp('${noticia.id}', 1)"></div>
+                            <div class="battery-segment" onclick="votarApp('${noticia.id}', 2)"></div>
+                            <div class="battery-segment" onclick="votarApp('${noticia.id}', 3)"></div>
+                            <div class="battery-segment" onclick="votarApp('${noticia.id}', 4)"></div>
+                            <div class="battery-segment" onclick="votarApp('${noticia.id}', 5)"></div>
+                        </div>
+                        <div class="battery-label">
+                            <span>Poca Confianza</span>
+                            <span>Alta Confianza</span>
+                        </div>
+                        <span class="battery-value-text" id="battery-status">${noticia.puntuacion || 3} de 5 Estrellas</span>
                     </div>
-                    <p style="font-size:14px; color:var(--text-sec); font-weight:600;">Puntaje: ${noticia.puntuacion || 3} de 5 Estrellas</p>
                 </div>
 
                 <div class="card" style="padding:25px; background:#1C1C1E; border-radius:20px; border:1px solid #333;">
@@ -163,6 +182,61 @@ function renderArticleDetail(noticia) {
         </div>
     `;
     fetchCommentsForRouter(noticia.id);
+}
+
+async function votarApp(noticiaId, puntos) {
+    try {
+        const r = await fetch('/api/v1/valorar', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({noticia_id: noticiaId, puntos: puntos})
+        });
+        const data = await r.json();
+        if(r.ok){
+            document.getElementById('battery-rating').setAttribute('data-value', Math.round(data.promedio));
+            document.getElementById('battery-status').innerText = `${parseFloat(data.promedio).toFixed(1)} de 5 Estrellas (${data.total} votos)`;
+            alert('¡Gracias por votar!');
+        } else {
+            alert(data.error === 'Login necesario' ? 'Inicia sesión para votar' : data.error);
+        }
+    } catch (e) { console.error('Error al votar:', e); }
+}
+
+function shareArticle(title, url) {
+    if (navigator.share) {
+        navigator.share({
+            title: title,
+            url: url
+        }).then(() => console.log('Compartido con éxito'))
+          .catch((error) => console.log('Error compartiendo', error));
+    } else {
+        navigator.clipboard.writeText(url).then(() => {
+            alert('Enlace copiado al portapapeles');
+        });
+    }
+}
+
+async function toggleFavorite(noticiaId) {
+    try {
+        const r = await fetch('/api/v1/favoritos', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({noticia_id: noticiaId})
+        });
+        const data = await r.json();
+        if(r.ok) {
+            const btn = document.getElementById(`save-btn-${noticiaId}`);
+            if(data.saved) {
+                btn.style.color = 'var(--accent)';
+                btn.innerHTML = `<i class='bx bxs-bookmark'></i> Guardado`;
+            } else {
+                btn.style.color = '';
+                btn.innerHTML = `<i class='bx bx-bookmark'></i> Guardar`;
+            }
+        } else {
+            alert(data.error === 'Login necesario' ? 'Inicia sesión para guardar' : data.error);
+        }
+    } catch (e) { console.error('Error al guardar:', e); }
 }
 
 async function fetchCommentsForRouter(noticiaId) {
@@ -319,7 +393,7 @@ function renderFeed(noticias) {
                                 <span>${(noticia.views/1000).toFixed(1)}K lecturas</span>
                             </div>
                             <div class="news-actions">
-                                <i class='bx bx-share-alt' ></i>
+                                <i class='bx bx-share-alt' onclick="event.preventDefault(); shareArticle('${noticia.title.replace(/'/g, "\\'")}', '${noticia.link}')"></i>
                             </div>
                         </div>
                     </div>
@@ -394,6 +468,10 @@ async function renderProfileView() {
         const user = await response.json();
 
         if (user && user.id) {
+            // Cargar favoritos
+            const favRes = await fetch('/api/v1/favoritos');
+            const favoritos = await favRes.json();
+
             container.innerHTML = `
                 <div class="profile-card">
                     <img src="${user.foto_perfil}" style="width:100px; height:100px; border-radius:50%; border:4px solid var(--accent); margin-bottom:20px;">
@@ -406,12 +484,28 @@ async function renderProfileView() {
                             <span class="stat-label">Puntos</span>
                         </div>
                         <div class="stat-box">
-                            <span class="stat-value">Bronce</span>
-                            <span class="stat-label">Rango</span>
+                            <span class="stat-value">${favoritos.length}</span>
+                            <span class="stat-label">Guardadas</span>
                         </div>
                     </div>
 
-                    <a href="/auth/logout" class="btn-secondary" style="display:block; text-decoration:none; padding:15px; border-radius:12px; font-weight:700;">Cerrar Sesión</a>
+                    <div style="margin-top:20px; text-align:left;">
+                        <h3 style="font-size:18px; margin-bottom:15px; display:flex; align-items:center; gap:8px;"><i class='bx bxs-bookmark' style="color:var(--accent)"></i> Mis Guardados</h3>
+                        <div id="saved-news-list" style="display:flex; flex-direction:column; gap:12px;">
+                            ${favoritos.length ? favoritos.map(f => `
+                                <a href="/noticias/${f.slug}" style="text-decoration:none; color:inherit;">
+                                    <div style="background:rgba(255,255,255,0.03); padding:10px; border-radius:12px; display:flex; gap:10px; align-items:center;">
+                                        <img src="${f.imageUrl}" style="width:50px; height:50px; border-radius:8px; object-fit:cover;">
+                                        <div style="flex:1;">
+                                            <p style="font-size:13px; font-weight:700; line-height:1.2; display:-webkit-box; -webkit-line-clamp:2; overflow:hidden; -webkit-box-orient:vertical;">${f.title}</p>
+                                        </div>
+                                    </div>
+                                </a>
+                            `).join('') : '<p style="color:#666; font-size:14px; text-align:center;">No tienes noticias guardadas.</p>'}
+                        </div>
+                    </div>
+
+                    <a href="/auth/logout" class="btn-secondary" style="display:block; text-decoration:none; padding:15px; border-radius:12px; font-weight:700; margin-top:30px;">Cerrar Sesión</a>
                 </div>
             `;
         } else {

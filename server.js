@@ -114,6 +114,15 @@ async function initDB() {
                 FOREIGN KEY (noticia_id) REFERENCES noticias(id),
                 FOREIGN KEY (user_id) REFERENCES usuarios(id)
             );
+            CREATE TABLE IF NOT EXISTS favoritos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                noticia_id TEXT,
+                user_id INTEGER,
+                fecha DATETIME DEFAULT (datetime('now')),
+                UNIQUE(noticia_id, user_id),
+                FOREIGN KEY (noticia_id) REFERENCES noticias(id),
+                FOREIGN KEY (user_id) REFERENCES usuarios(id)
+            );
             -- Índices de Alto Rendimiento
             CREATE INDEX IF NOT EXISTS idx_slug ON noticias(slug);
             CREATE INDEX IF NOT EXISTS idx_relevancia ON noticias(fecha_captura, puntuacion);
@@ -352,6 +361,35 @@ app.get('/api/v1/comentarios', async (req, res) => {
 
 app.get('/api/v1/user-status', (req, res) => res.json(req.user || {}));
 
+// Favoritos
+app.post('/api/v1/favoritos', async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: 'Login necesario' });
+    try {
+        const { noticia_id } = req.body;
+        const exists = await dbQuery.get('SELECT id FROM favoritos WHERE noticia_id = ? AND user_id = ?', [noticia_id, req.user.id]);
+        if (exists) {
+            await dbQuery.run('DELETE FROM favoritos WHERE noticia_id = ? AND user_id = ?', [noticia_id, req.user.id]);
+            res.json({ saved: false });
+        } else {
+            await dbQuery.run('INSERT INTO favoritos (noticia_id, user_id) VALUES (?, ?)', [noticia_id, req.user.id]);
+            res.json({ saved: true });
+        }
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/v1/favoritos', async (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: 'Login necesario' });
+    try {
+        const rows = await dbQuery.all(`
+            SELECT n.* FROM noticias n 
+            JOIN favoritos f ON n.id = f.noticia_id 
+            WHERE f.user_id = ? 
+            ORDER BY f.fecha DESC
+        `, [req.user.id]);
+        res.json(rows.map(formatearFront));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // Auth
 app.get('/auth/google', authConfigured, passport.authenticate('google', { scope: ['profile', 'email'] }));
 app.get('/auth/google/callback', authConfigured, passport.authenticate('google', { failureRedirect: '/' }), (req, res) => res.redirect('/'));
@@ -375,8 +413,28 @@ app.get('/noticias/:slug', async (req, res) => {
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no text-size-adjust=none">
-    <title>${noticia.titulo} | Intlax</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>${noticia.titulo} | Noticias de Tlaxcala</title>
+    
+    <!-- SEO Dinámico -->
+    <meta name="description" content="${noticia.resumen.substring(0, 160)}">
+    <link rel="canonical" href="https://intlax.com/noticias/${noticia.slug}">
+    <link rel="icon" type="image/png" href="/favicon.png">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://intlax.com/noticias/${noticia.slug}">
+    <meta property="og:title" content="${noticia.titulo}">
+    <meta property="og:description" content="${noticia.resumen.substring(0, 200)}">
+    <meta property="og:image" content="${noticia.imageUrl}">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://intlax.com/noticias/${noticia.slug}">
+    <meta property="twitter:title" content="${noticia.titulo}">
+    <meta property="twitter:description" content="${noticia.resumen.substring(0, 200)}">
+    <meta property="twitter:image" content="${noticia.imageUrl}">
+
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
     <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
     <style>
@@ -416,11 +474,21 @@ app.get('/noticias/:slug', async (req, res) => {
         <a href="${noticia.linkOriginal}" class="main-btn">VER NOTA COMPLETA</a>
 
         <div class="section-card">
-            <h3 class="section-title"><i class='bx bxs-check-shield' style="color:var(--accent)"></i> Confiabilidad</h3>
-            <div class="bar-outer">
-                <div class="bar-inner" style="width:${pct}%; background:${barColor}"></div>
+            <h3 class="section-title"><i class='bx bxs-check-shield' style="color:var(--accent)"></i> Confiabilidad Ciudadana</h3>
+            <div class="battery-container">
+                <div class="battery-bar" id="battery-rating" data-value="${Math.round(promedio)}">
+                    <div class="battery-segment" onclick="votar(1)"></div>
+                    <div class="battery-segment" onclick="votar(2)"></div>
+                    <div class="battery-segment" onclick="votar(3)"></div>
+                    <div class="battery-segment" onclick="votar(4)"></div>
+                    <div class="battery-segment" onclick="votar(5)"></div>
+                </div>
+                <div class="battery-label">
+                    <span>Poca Confianza</span>
+                    <span>Alta Confianza</span>
+                </div>
+                <span class="battery-value-text" id="battery-status">${promedio} de 5 Estrellas (${val.total || 0} votos)</span>
             </div>
-            <p style="font-size: 13px; color: var(--text-sec);">${promedio} de 5 Estrellas (${val.total || 0} ciudadanos han votado)</p>
         </div>
 
         <div class="section-card">
@@ -458,6 +526,23 @@ app.get('/noticias/:slug', async (req, res) => {
                 body:JSON.stringify({noticia_id:'${noticia.id}',comentario:t})
             });
             if(r.ok) location.reload();
+        }
+
+        async function votar(p){
+            const r = await fetch('/api/v1/valorar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({noticia_id: '${noticia.id}', puntos: p})
+            });
+            if(r.ok){
+                const data = await r.json();
+                document.getElementById('battery-rating').setAttribute('data-value', Math.round(data.promedio));
+                document.getElementById('battery-status').innerText = `${parseFloat(data.promedio).toFixed(1)} de 5 Estrellas (${data.total} votos)`;
+                alert('¡Voto registrado!');
+            } else {
+                const err = await r.json();
+                alert(err.error === 'Login necesario' ? 'Inicia sesión para votar' : err.error);
+            }
         }
     </script>
 </body>
