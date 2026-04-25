@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('🚀 Intlax v8.1 Activo - Modo Router Híbrido');
+    console.log('🚀 Intlax v10.0 ACTIVO - Sistema Maestro de Scroll Natural');
     
     // El Router toma el control total si estamos en una noticia
     const isArticle = await handleRouting();
