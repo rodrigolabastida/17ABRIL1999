@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('%c 🚀 Intlax v2.5.1 ACTIVO - Señal Social & TV Estable ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
+    console.log('%c 🚀 Intlax v2.5.2 ACTIVO - Señal Corregida & TV Estable ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
     localStorage.removeItem('intlax_loc_pref'); // Limpieza de rastro de versiones viejas
     
     // El Router toma el control total si estamos en una noticia
@@ -662,9 +662,9 @@ function loadMilenioTV() {
     const container = document.getElementById('milenio-player');
     if (!container || container.querySelector('iframe')) return;
     
-    // Inyectamos el iframe solo cuando el usuario entra para ahorrar datos
+    // Canal oficial de Milenio: UC85a9iKqG4XkHjHlQh5Jm-w
     container.innerHTML = `
-        <iframe src="https://www.youtube.com/embed/live_stream?channel=UCjwamZGMENIUxB2EkZ8zXAw&autoplay=0&mute=1" 
+        <iframe src="https://www.youtube.com/embed/live_stream?channel=UC85a9iKqG4XkHjHlQh5Jm-w&autoplay=1&mute=1" 
                 title="Milenio TV En Vivo" 
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                 allowfullscreen></iframe>
