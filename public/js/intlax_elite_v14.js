@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('%c 🚀 Intlax v2.5.3 ACTIVO - Señal Directa Estabilizada ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
+    console.log('%c 🚀 Intlax v2.6 ACTIVO - Centro Multiseñal en Vivo ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
     localStorage.removeItem('intlax_loc_pref'); // Limpieza de rastro de versiones viejas
     
     // El Router toma el control total si estamos en una noticia
@@ -659,17 +659,35 @@ window.fillSearch = function(term) {
 
 // --- LOGICA DE FOROS ---
 function loadMilenioTV() {
-    const container = document.getElementById('milenio-player');
-    if (!container || container.querySelector('iframe')) return;
+    const milenio = document.getElementById('milenio-player');
+    const rt = document.getElementById('rt-player');
     
-    // Enlace directo de Milenio proporcionado por el usuario
-    container.innerHTML = `
-        <iframe src="https://www.youtube.com/embed/tQ941SU5UR0?autoplay=1&mute=1" 
-                title="Milenio TV En Vivo" 
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                allowfullscreen></iframe>
-    `;
-    console.log('📺 Señal de Milenio TV enlazada correctamente.');
+    // Milenio (Link directo proporcionado por el usuario)
+    if (milenio && !milenio.querySelector('iframe')) {
+        milenio.innerHTML = `
+            <iframe src="https://www.youtube.com/embed/tQ941SU5UR0?autoplay=0&mute=1" 
+                    title="Milenio TV" allowfullscreen></iframe>
+        `;
+    }
+
+    // RT Noticias (Official Embed)
+    if (rt && !rt.querySelector('iframe')) {
+        rt.innerHTML = `
+            <iframe src="https://actualidad.rt.com/live-embed" 
+                    title="RT Noticias" allowfullscreen></iframe>
+        `;
+    }
+
+    // N+ Media (Direct Link)
+    const nmas = document.getElementById('nmas-player');
+    if (nmas && !nmas.querySelector('iframe')) {
+        nmas.innerHTML = `
+            <iframe src="https://www.youtube.com/embed/p2AzyIEuFak?autoplay=0&mute=1" 
+                    title="N+ Media" allowfullscreen></iframe>
+        `;
+    }
+    
+    console.log('📺 Carrusel actualizado: Milenio + RT + N+');
 }
 
 async function renderForosView(categoria = 'Todo') {

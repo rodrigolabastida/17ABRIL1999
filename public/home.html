@@ -68,7 +68,7 @@
     <header class="top-bar">
         <div style="display:flex; align-items:baseline; gap:6px;">
             <h1 class="logo">Intlax</h1>
-            <span style="font-size:9px; color:#555; font-weight:700; letter-spacing:0.5px; opacity:0.6;">v2.5.3</span>
+            <span style="font-size:9px; color:#555; font-weight:700; letter-spacing:0.5px; opacity:0.6;">v2.6</span>
         </div>
         <div class="top-bar-icons">
             <div class="notification-icon">
@@ -134,18 +134,49 @@
 
         <!-- Vista de Foros (Nuevo) -->
         <section id="foros-view" class="hidden">
-            <!-- TV En Vivo (Cabecera del Foro) -->
-            <div class="foro-live-container">
-                <div class="foro-live-badge">
-                    <span class="pulse-dot"></span> EN VIVO
-                </div>
-                <div id="milenio-player" class="foro-video-wrapper">
-                    <!-- El iframe se cargará bajo demanda via JS -->
-                    <div class="video-placeholder">
-                        <i class='bx bx-play-circle'></i>
-                        <span>Cargando señal de Milenio TV...</span>
+            <!-- TV CAROUSEL (Cabecera del Foro) -->
+            <div class="foro-tv-carousel">
+                <!-- Slide 1: Milenio -->
+                <div class="tv-slide">
+                    <div class="foro-live-badge">
+                        <span class="pulse-dot"></span> MILENIO TV
+                    </div>
+                    <div id="milenio-player" class="foro-video-wrapper">
+                        <div class="video-placeholder">
+                            <i class='bx bx-play-circle'></i>
+                            <span>Conectando Milenio...</span>
+                        </div>
                     </div>
                 </div>
+
+                <!-- Slide 2: RT -->
+                <div class="tv-slide">
+                    <div class="foro-live-badge" style="background: #e62117;">
+                        <span class="pulse-dot"></span> ACTUALIDAD RT
+                    </div>
+                    <div id="rt-player" class="foro-video-wrapper">
+                        <div class="video-placeholder">
+                            <i class='bx bx-play-circle'></i>
+                            <span>Conectando RT Noticias...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Slide 3: Nmas -->
+                <div class="tv-slide">
+                    <div class="foro-live-badge" style="background: #0046CC;">
+                        <span class="pulse-dot"></span> N+ MEDIA
+                    </div>
+                    <div id="nmas-player" class="foro-video-wrapper">
+                        <div class="video-placeholder">
+                            <i class='bx bx-play-circle'></i>
+                            <span>Conectando N+ Media...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="tv-nav-info">
+                <i class='bx bx-chevron-left'></i> Desliza para cambiar señal <i class='bx bx-chevron-right'></i>
             </div>
 
             <div class="foros-filter-bar">
@@ -270,6 +301,6 @@
         <div class="geo-particles" id="geo-particles"></div>
     </div>
 
-    <script src="/js/intlax_elite_v14.js?v=2.5.3"></script>
+    <script src="/js/intlax_elite_v14.js?v=2.6"></script>
 </body>
 </html>
