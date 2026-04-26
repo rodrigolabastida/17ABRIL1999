@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('%c 🚀 Intlax v2.4 ACTIVO - Radar & Visor Estable ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
+    console.log('%c 🚀 Intlax v2.5 ACTIVO - Señal Social & Algoritmo v2.0 ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
     localStorage.removeItem('intlax_loc_pref'); // Limpieza de rastro de versiones viejas
     
     // El Router toma el control total si estamos en una noticia
@@ -495,6 +495,7 @@ function setupBottomNav() {
             document.getElementById('foros-view').classList.remove('hidden');
             forosBtn.classList.add('active');
             renderForosView();
+            loadMilenioTV(); // Carga de video bajo demanda
         } else if (viewId === 'denuncias') {
             document.getElementById('denuncias-view').classList.remove('hidden');
             denunciasBtn.classList.add('active');
@@ -657,6 +658,20 @@ window.fillSearch = function(term) {
 };
 
 // --- LOGICA DE FOROS ---
+function loadMilenioTV() {
+    const container = document.getElementById('milenio-player');
+    if (!container || container.querySelector('iframe')) return;
+    
+    // Inyectamos el iframe solo cuando el usuario entra para ahorrar datos
+    container.innerHTML = `
+        <iframe src="https://www.youtube.com/embed/live_stream?channel=UCjwamZGMENIUxB2EkZ8zXAw&autoplay=0&mute=1" 
+                title="Milenio TV En Vivo" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                allowfullscreen></iframe>
+    `;
+    console.log('📺 Señal de Milenio TV enlazada correctamente.');
+}
+
 async function renderForosView(categoria = 'Todo') {
     const container = document.getElementById('foros-container');
     container.innerHTML = '<div class="loading-foros">Cargando debate ciudadano...</div>';
@@ -687,7 +702,7 @@ async function renderForosView(categoria = 'Todo') {
                         </div>
                     </div>
                     
-                    <div class="foro-main" onclick="window.location.href='/noticias/${item.slug}'">
+                    <div class="foro-main" onclick="openInAppBrowser('${item.link}')">
                         <div class="foro-main-text">
                             <h3 class="foro-title">${item.title}</h3>
                         </div>
@@ -695,7 +710,7 @@ async function renderForosView(categoria = 'Todo') {
                     </div>
 
                     <div class="foro-comments-section">
-                        ${item.comentarios_destacados.length > 0 ? item.comentarios_destacados.map(c => `
+                        ${item.comentarios_destacados.length > 0 ? item.comentarios_destacados.slice(0, 2).map(c => `
                             <div class="foro-comment-item">
                                 <img src="${c.foto_perfil}" class="foro-comment-avatar">
                                 <div class="foro-comment-content">
@@ -703,7 +718,7 @@ async function renderForosView(categoria = 'Todo') {
                                     <p class="foro-comment-text">${c.comentario}</p>
                                 </div>
                             </div>
-                        `).join('') : '<p style="font-size:12px; color:#666; text-align:center; padding:10px;">Sin comentarios destacados aún.</p>'}
+                        `).join('') : '<p style="font-size:12px; color:#666; text-align:center; padding:10px;">¡Sé el primero en comentar!</p>'}
                     </div>
 
                     <div class="foro-quick-action">

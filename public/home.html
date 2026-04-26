@@ -68,7 +68,7 @@
     <header class="top-bar">
         <div style="display:flex; align-items:baseline; gap:6px;">
             <h1 class="logo">Intlax</h1>
-            <span style="font-size:9px; color:#555; font-weight:700; letter-spacing:0.5px; opacity:0.6;">v2.4</span>
+            <span style="font-size:9px; color:#555; font-weight:700; letter-spacing:0.5px; opacity:0.6;">v2.5</span>
         </div>
         <div class="top-bar-icons">
             <div class="notification-icon">
@@ -134,11 +134,25 @@
 
         <!-- Vista de Foros (Nuevo) -->
         <section id="foros-view" class="hidden">
+            <!-- TV En Vivo (Cabecera del Foro) -->
+            <div class="foro-live-container">
+                <div class="foro-live-badge">
+                    <span class="pulse-dot"></span> EN VIVO
+                </div>
+                <div id="milenio-player" class="foro-video-wrapper">
+                    <!-- El iframe se cargará bajo demanda via JS -->
+                    <div class="video-placeholder">
+                        <i class='bx bx-play-circle'></i>
+                        <span>Cargando señal de Milenio TV...</span>
+                    </div>
+                </div>
+            </div>
+
             <div class="foros-filter-bar">
                 <div class="chip-filter active" onclick="filtrarForo('Todo', this)">Todo</div>
                 <div class="chip-filter" onclick="filtrarForo('Alerta de Seguridad', this)">🚨 Alertas</div>
                 <div class="chip-filter" onclick="filtrarForo('Debate Público', this)">🗣️ Debate</div>
-                <div class="chip-filter" onclick="filtrarForo('Ayuda/Comunidad', this)">🤝 Ayuda</div>
+                <div class="chip-filter" onclick="filtrarForo('Red de Apoyo', this)">🤝 Apoyo</div>
             </div>
             <div id="foros-container" class="foros-feed">
                 <!-- Inyectado por JS -->

@@ -262,8 +262,13 @@ function calcularInteres(titulo, resumen) {
     let puntuacion = 50;
     const txtTitulo = (titulo || "").toLowerCase();
     const txtResumen = (resumen || "").toLowerCase();
-    const kH = ["accidente", "muerto", "fallece", "detienen", "balacera", "robo", "asalto", "tragedia", "choque", "incendio", "homicidio"];
-    kH.forEach(p => { if (txtTitulo.includes(p)) puntuacion += 40; if (txtResumen.includes(p)) puntuacion += 20; });
+    
+    const kH = ["accidente", "muerto", "fallece", "detienen", "balacera", "robo", "asalto", "tragedia", "choque", "incendio", "homicidio", "ejecutado", "crimen"];
+    const kGov = ["gobierno", "municipio", "comunicado", "boletín", "entrega", "obra", "reunion", "gobernadora", "alcalde"];
+
+    kH.forEach(p => { if (txtTitulo.includes(p) || txtResumen.includes(p)) puntuacion += 25; });
+    kGov.forEach(p => { if (txtTitulo.includes(p) || txtResumen.includes(p)) puntuacion -= 20; });
+    
     return puntuacion;
 }
 
@@ -275,7 +280,7 @@ function asignarEtiquetaForo(titulo, resumen) {
 
     if (seguridad.some(p => txt.includes(p))) return 'Alerta de Seguridad';
     if (debate.some(p => txt.includes(p))) return 'Debate Público';
-    if (ayuda.some(p => txt.includes(p))) return 'Ayuda/Comunidad';
+    if (ayuda.some(p => txt.includes(p))) return 'Red de Apoyo';
     return null;
 }
 
@@ -396,8 +401,9 @@ app.get('/api/v1/foro', async (req, res) => {
         const params = [];
 
         if (categoria && categoria !== 'Todo') {
+            const finalCat = (categoria === 'Ayuda' || categoria === 'Red de Apoyo') ? 'Red de Apoyo' : categoria;
             filter += " AND n.etiqueta_foro = ?";
-            params.push(categoria);
+            params.push(finalCat);
         }
 
         const rows = await dbQuery.all(`
