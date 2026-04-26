@@ -1101,16 +1101,19 @@ body {
 /* TV CAROUSEL PREMIUM */
 .foro-tv-carousel {
     display: flex;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
     scrollbar-width: none;
     padding: 15px 20px;
     gap: 15px;
+    -webkit-overflow-scrolling: touch;
 }
 .foro-tv-carousel::-webkit-scrollbar { display: none; }
 
 .tv-slide {
-    flex-shrink: 0;
+    flex: 0 0 100%; /* Asegura que cada slide ocupe exactamente el 100% del contenedor */
     width: 100%;
     scroll-snap-align: center;
     position: relative;
