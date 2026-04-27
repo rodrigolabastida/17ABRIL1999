@@ -150,10 +150,44 @@
             <header class="header">
                 <h1 class="logo"><span>INTLAX</span> MASTER</h1>
                 <div style="display: flex; gap: 10px;">
+                    <button class="btn" style="background: var(--bg); color: var(--accent); border: 1px solid var(--accent); font-size: 11px;" onclick="toggleScraperModal()">
+                        <i class='bx bx-radar'></i> Escaneo Manual
+                    </button>
                     <a href="/" class="btn btn-view"><i class='bx bx-home-alt'></i> Ver Sitio</a>
                     <a href="/auth/logout" class="btn" style="background: var(--danger); color: white;">Salir</a>
                 </div>
             </header>
+
+            <!-- Modal Scraper Manual -->
+            <div id="scraper-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:1000; padding:20px; overflow-y:auto;">
+                <div style="max-width:800px; margin:40px auto; background:var(--card); border-radius:24px; padding:30px; border:1px solid var(--accent); box-shadow: 0 0 50px rgba(255,204,0,0.1);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px;">
+                        <h2 class="section-title" style="margin:0;"><i class='bx bx-scan'></i> ANALIZADOR DE EXTRACCIÓN</h2>
+                        <button class="btn btn-small" onclick="toggleScraperModal()" style="background:#333; color:#fff;">Cerrar</button>
+                    </div>
+                    
+                    <div id="scraper-status" style="text-align:center; padding:20px; display:none;">
+                        <i class='bx bx-loader-alt bx-spin' style="font-size:40px; color:var(--accent);"></i>
+                        <p style="margin-top:15px; font-weight:700;">Iniciando barrido de medios...</p>
+                    </div>
+
+                    <div id="scraper-results" style="margin-top:20px; display:none;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:25px;">
+                            <div class="stat-card"><span class="stat-value" id="res-nuevas">0</span><span class="stat-label">Inyectadas</span></div>
+                            <div class="stat-card"><span class="stat-value" id="res-total">0</span><span class="stat-label">Analizadas</span></div>
+                        </div>
+                        <div style="background:#000; border-radius:12px; padding:15px; font-family:monospace; font-size:12px; max-height:400px; overflow-y:auto;" id="scraper-log">
+                            <!-- Log dinámico -->
+                        </div>
+                    </div>
+
+                    <div style="margin-top:30px; text-align:center;">
+                        <button id="start-scrape-btn" class="btn" style="width:100%; border-radius:15px; padding:20px; font-size:16px;" onclick="runManualScrape()">
+                            <i class='bx bx-play-circle'></i> INICIAR ESCANEO DE CALIDAD
+                        </button>
+                    </div>
+                </div>
+            </div>
 
             <div class="stats-grid">
                 <div class="stat-card">
@@ -330,6 +364,53 @@
                 setTimeout(() => btn.classList.remove('bx-spin'), 500);
             }
         }
+        function toggleScraperModal() {
+            const m = document.getElementById('scraper-modal');
+            m.style.display = m.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function runManualScrape() {
+            const btn = document.getElementById('start-scrape-btn');
+            const status = document.getElementById('scraper-status');
+            const results = document.getElementById('scraper-results');
+            const log = document.getElementById('scraper-log');
+            
+            btn.style.display = 'none';
+            status.style.display = 'block';
+            results.style.display = 'block';
+            log.innerHTML = '<p style="color:#888;">> Conectando con satélites de noticias...</p>';
+
+            try {
+                const res = await fetch('/api/v1/admin/scrape-manual', { method: 'POST' });
+                const data = await res.json();
+                
+                status.style.display = 'none';
+                document.getElementById('res-nuevas').innerText = data.nuevas;
+                document.getElementById('res-total').innerText = data.reporteCalidad.length;
+
+                log.innerHTML = data.reporteCalidad.map(item => {
+                    let color = item.calidad >= 80 ? '#22C55E' : (item.calidad >= 60 ? '#FFCC00' : '#EF4444');
+                    return `
+                        <div style="border-bottom:1px solid #222; padding:10px 0;">
+                            <p style="color:#fff; font-weight:700;">[${item.fuente}] ${item.titulo}</p>
+                            <p style="color:${color}; font-size:11px;">Calidad: ${item.calidad}% - 
+                            ${item.detalles.foto ? '✅ Foto' : '❌ Sin Foto'} | 
+                            ${item.detalles.texto ? '✅ Resumen' : '❌ Texto Breve'} | 
+                            ${item.detalles.autor ? '✅ Autor' : '❌ Autor Genérico'}
+                            </p>
+                        </div>
+                    `;
+                }).join('') + `<p style="color:var(--accent); margin-top:10px;">> ESCANEO FINALIZADO. ${data.nuevas} noticias inyectadas con éxito.</p>`;
+                
+                init(); // Refrescar stats generales
+            } catch (e) {
+                log.innerHTML += `<p style="color:var(--danger);">> ERROR CRÍTICO: ${e.message}</p>`;
+            } finally {
+                btn.style.display = 'block';
+                btn.innerText = 'VOLVER A ESCANEAR';
+            }
+        }
+
         init();
     </script>
 </body>

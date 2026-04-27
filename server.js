@@ -167,8 +167,9 @@ async function initDB() {
                 ALTER TABLE comentarios ADD COLUMN ip_address TEXT;
                 ALTER TABLE valoraciones ADD COLUMN ip_address TEXT;
                 ALTER TABLE noticias ADD COLUMN etiqueta_foro TEXT;
+                ALTER TABLE noticias ADD COLUMN autor TEXT;
             `);
-            console.log('✅ Columnas de IP y Etiqueta Foro añadidas.');
+            console.log('✅ Columnas de IP, Etiqueta Foro y Autor añadidas.');
         } catch (e) {
             // Ignoramos si las columnas ya existen
         }
@@ -307,39 +308,54 @@ function asignarEtiquetaForo(titulo, resumen) {
 }
 
 async function fetchAllRssFeeds(force = false) {
-    // Eliminamos el bloqueo para asegurar extracción cada 30 min
-    console.log('🔄 Extrayendo nuevos feeds RSS de internet...');
     const startTime = Date.now();
     let nuevas = 0;
     let actualizadas = 0;
     let erroresArr = [];
+    let reporteCalidad = [];
 
     for (const feedData of FEED_URLS) {
         try {
             const feed = await parser.parseURL(feedData.url);
-            for (const item of feed.items.slice(0, 40)) {
+            for (const item of feed.items.slice(0, 5)) { // Limitamos a 5 por fuente para el reporte manual rápido
                 const summaryText = extractSummary(item.description || item.content);
                 const score = calcularInteres(item.title, summaryText);
                 const etiqueta = asignarEtiquetaForo(item.title, summaryText);
                 const imageUrl = await extraerUrlImagen(item);
                 const slug = generarSlug(item.title);
+                const autor = item.creator || item.author || feedData.source;
                 
+                // Cálculo de Calidad (v3.4)
+                let qPoints = 0;
+                if (imageUrl && !imageUrl.includes('placeholder')) qPoints += 20;
+                if (summaryText && summaryText.length > 50) qPoints += 20;
+                if (item.pubDate) qPoints += 20;
+                if (autor && autor !== feedData.source) qPoints += 20;
+                if (etiqueta) qPoints += 20;
+
                 const res = await dbQuery.run(`
-                    INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura, slug, etiqueta_foro)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura, slug, etiqueta_foro, autor)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(linkOriginal) DO UPDATE SET 
                         puntuacion = excluded.puntuacion,
-                        etiqueta_foro = COALESCE(noticias.etiqueta_foro, excluded.etiqueta_foro)
+                        etiqueta_foro = COALESCE(noticias.etiqueta_foro, excluded.etiqueta_foro),
+                        autor = COALESCE(noticias.autor, excluded.autor)
                 `, [Math.random().toString(36).substr(2, 9), item.title, summaryText, imageUrl, item.link, feedData.source, 
-                   item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(), score, 0, '', 19.31, -98.24, new Date().toISOString(), slug, etiqueta]);
+                   item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(), score, 0, '', 19.31, -98.24, new Date().toISOString(), slug, etiqueta, autor]);
                 
                 if (res.changes > 0) {
                     if (res.lastID) nuevas++; 
                     else actualizadas++;
                 }
+
+                reporteCalidad.push({
+                    titulo: item.title,
+                    fuente: feedData.source,
+                    calidad: qPoints,
+                    detalles: { foto: !!qPoints, texto: summaryText.length > 50, autor: autor !== feedData.source }
+                });
             }
         } catch (err) { 
-            console.log(`⚠️ Fuente ${feedData.source} no disponible.`); 
             erroresArr.push(feedData.source);
         }
     }
@@ -347,8 +363,8 @@ async function fetchAllRssFeeds(force = false) {
     const duration = Date.now() - startTime;
     await dbQuery.run('INSERT INTO historial_extraccion (nuevas, actualizadas, errores, duracion_ms) VALUES (?, ?, ?, ?)', 
         [nuevas, actualizadas, erroresArr.join(', '), duration]);
-        
-    console.log(`✅ Extracción completada: ${nuevas} nuevas, ${actualizadas} actualizadas.`);
+    
+    return { nuevas, actualizadas, reporteCalidad, errores: erroresArr };
 }
 
 cron.schedule('*/30 * * * *', () => fetchAllRssFeeds(true));
@@ -642,7 +658,14 @@ app.get('/api/v1/admin/stats', isAdmin, async (req, res) => {
         // Logs de extracción (v3.3)
         const extracciones = await dbQuery.all('SELECT * FROM historial_extraccion ORDER BY fecha DESC LIMIT 10');
         
-        res.json({ general, masRelevantes, orígenes, extracciones, version_stats: { current: 'v3.3', last_update: 'Hoy (Motor de Logs)' } });
+        res.json({ general, masRelevantes, orígenes, extracciones, version_stats: { current: 'v3.4', last_update: 'Hoy (Extractor Manual)' } });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/v1/admin/scrape-manual', isAdmin, async (req, res) => {
+    try {
+        const report = await fetchAllRssFeeds(true);
+        res.json(report);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.get('/auth/google', authConfigured, passport.authenticate('google', { scope: ['profile', 'email'] }));
