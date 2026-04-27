@@ -519,7 +519,12 @@ app.get('/api/v1/comentarios', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/v1/user-status', (req, res) => res.json(req.user || {}));
+app.get('/api/v1/user-status', (req, res) => {
+    if (!req.user) return res.json({});
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const userData = { ...req.user, isAdmin: (req.user.rol === 'admin' || (adminEmail && req.user.email === adminEmail)) };
+    res.json(userData);
+});
 
 // Favoritos
 app.post('/api/v1/favoritos', async (req, res) => {
@@ -550,9 +555,12 @@ app.get('/api/v1/favoritos', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Middleware Admin
+// Middleware Admin (Actualizado v2.9)
 const isAdmin = (req, res, next) => {
-    if (req.isAuthenticated() && req.user.rol === 'admin') return next();
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (req.isAuthenticated() && (req.user.rol === 'admin' || (adminEmail && req.user.email === adminEmail))) {
+        return next();
+    }
     res.status(403).json({ error: 'Acceso restringido a administradores.' });
 };
 
@@ -567,9 +575,9 @@ app.get('/api/v1/admin/stats', isAdmin, async (req, res) => {
                 (SELECT SUM(vistas) FROM noticias) as totalVistas
         `);
         const masRelevantes = await dbQuery.all(`
-            SELECT titulo, vistas, 
+            SELECT id, titulo, vistas, fuente, fecha_publicacion,
             (SELECT COUNT(*) FROM comentarios WHERE noticia_id = noticias.id) as num_comentarios
-            FROM noticias ORDER BY vistas DESC LIMIT 5
+            FROM noticias ORDER BY vistas DESC LIMIT 20
         `);
         res.json({ general, masRelevantes });
     } catch (err) { res.status(500).json({ error: err.message }); }

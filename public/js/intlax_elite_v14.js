@@ -572,7 +572,13 @@ async function renderProfileView() {
                         </div>
                     </div>
 
-                    <a href="/auth/logout" class="btn-secondary" style="display:block; text-decoration:none; padding:15px; border-radius:12px; font-weight:700; margin-top:30px;">Cerrar Sesión</a>
+                    ${user.rol === 'admin' || user.isAdmin ? `
+                        <a href="/admin.html" class="btn-primary" style="display:block; text-decoration:none; padding:15px; border-radius:12px; font-weight:700; margin-top:20px; background:var(--accent); color:#000;">
+                            <i class='bx bxs-dashboard'></i> Panel de Control
+                        </a>
+                    ` : ''}
+
+                    <a href="/auth/logout" class="btn-secondary" style="display:block; text-decoration:none; padding:15px; border-radius:12px; font-weight:700; margin-top:10px;">Cerrar Sesión</a>
                 </div>
             `;
         } else {

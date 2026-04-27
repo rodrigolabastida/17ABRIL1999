@@ -3,114 +3,250 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard | Intlax</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
+    <title>Intlax | Admin Master Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;800&display=swap" rel="stylesheet">
     <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
     <style>
-        :root { --accent: #FFCC00; --bg: #0A0A0B; --card: #141416; --text: #FFFFFF; --text-sec: #A0A0A0; }
+        :root { 
+            --accent: #FFCC00; 
+            --bg: #0A0A0B; 
+            --card: #141416; 
+            --text: #FFFFFF; 
+            --text-sec: #8E8E93;
+            --border: #232326;
+            --danger: #FF3B30;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; padding: 20px; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
-        .logo { font-size: 24px; font-weight: 800; color: var(--accent); }
-        
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 40px; }
-        .stat-card { background: var(--card); padding: 25px; border-radius: 20px; border: 1px solid #232326; text-align: center; }
-        .stat-value { font-size: 32px; font-weight: 800; display: block; margin-bottom: 5px; color: var(--accent); }
-        .stat-label { font-size: 12px; color: var(--text-sec); text-transform: uppercase; letter-spacing: 1px; }
+        body { 
+            background: var(--bg); 
+            color: var(--text); 
+            font-family: 'Outfit', sans-serif; 
+            padding: 20px 15px; 
+            min-height: 100vh;
+        }
 
-        .section { background: var(--card); border-radius: 24px; padding: 30px; border: 1px solid #232326; margin-bottom: 30px; }
-        .section-title { font-size: 20px; font-weight: 800; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 30px;
+            padding: 10px 0;
+            border-bottom: 2px solid var(--accent);
+        }
+        .logo { font-size: 20px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; }
+        .logo span { color: var(--accent); }
+
+        .stats-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); 
+            gap: 15px; 
+            margin-bottom: 30px; 
+        }
+        .stat-card { 
+            background: var(--card); 
+            padding: 20px; 
+            border-radius: 16px; 
+            border: 1px solid var(--border); 
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+        .stat-card:hover { transform: translateY(-5px); border-color: var(--accent); }
+        .stat-value { font-size: 28px; font-weight: 800; display: block; margin-bottom: 5px; color: var(--accent); }
+        .stat-label { font-size: 10px; color: var(--text-sec); text-transform: uppercase; letter-spacing: 1px; }
+
+        .section { 
+            background: var(--card); 
+            border-radius: 20px; 
+            padding: 20px; 
+            border: 1px solid var(--border); 
+            margin-bottom: 20px; 
+            overflow: hidden;
+        }
+        .section-title { 
+            font-size: 18px; 
+            font-weight: 800; 
+            margin-bottom: 20px; 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            border-bottom: 1px solid #222;
+            padding-bottom: 10px;
+        }
         
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { text-align: left; color: var(--text-sec); font-size: 12px; text-transform: uppercase; padding: 15px; border-bottom: 1px solid #232326; }
-        td { padding: 15px; border-bottom: 1px solid #232326; font-size: 14px; }
+        .table-wrapper { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; color: var(--text-sec); font-size: 10px; text-transform: uppercase; padding: 12px; border-bottom: 1px solid var(--border); }
+        td { padding: 15px 12px; border-bottom: 1px solid #111; font-size: 13px; }
         
-        .relevance-badge { background: rgba(255, 204, 0, 0.1); color: var(--accent); padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 12px; }
+        .fuente-badge { 
+            background: rgba(255, 255, 255, 0.05); 
+            padding: 4px 8px; 
+            border-radius: 6px; 
+            font-size: 11px; 
+            color: #ccc; 
+        }
+
+        .btn { 
+            background: var(--accent); 
+            color: #000; 
+            padding: 10px 15px; 
+            border-radius: 8px; 
+            font-weight: 700; 
+            text-decoration: none; 
+            display: inline-flex; 
+            align-items: center;
+            gap: 5px;
+            border: none; 
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .btn-view { background: #333; color: #fff; padding: 5px 10px; }
+
+        #error-msg { 
+            background: rgba(255, 59, 48, 0.1); 
+            color: var(--danger); 
+            padding: 30px; 
+            border-radius: 20px; 
+            text-align: center;
+            border: 1px solid var(--danger);
+            margin: 50px auto;
+            max-width: 400px;
+            display: none;
+        }
         
-        .btn { background: var(--accent); color: #000; padding: 12px 24px; border-radius: 12px; font-weight: 800; text-decoration: none; display: inline-block; border: none; cursor: pointer; }
-        .btn-small { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
-        
-        #error-msg { background: #ef4444; color: #fff; padding: 20px; border-radius: 12px; display: none; margin-bottom: 20px; }
+        .refresh-btn { 
+            position: fixed; 
+            bottom: 20px; 
+            right: 20px; 
+            width: 50px; 
+            height: 50px; 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 24px;
+            box-shadow: 0 4px 20px rgba(255,204,0,0.4);
+            z-index: 100;
+        }
+
+        @media (max-width: 600px) {
+            .stat-value { font-size: 22px; }
+            td:nth-child(3) { display: none; } /* Ocultar comentarios en móvil */
+        }
     </style>
 </head>
 <body>
-    <div id="error-msg">
-        <i class='bx bx-error-circle'></i> No tienes permisos para acceder o no has iniciado sesión.
-    </div>
-
-    <div id="admin-content" style="display:none;">
-        <header class="header">
-            <h1 class="logo">Intlax Admin</h1>
-            <button class="btn btn-small" onclick="location.href='/auth/logout'">Cerrar Sesión</button>
-        </header>
-
-        <div class="stats-grid">
-            <div class="stat-card">
-                <span class="stat-value" id="stat-noticias">-</span>
-                <span class="stat-label">Noticias Totales</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-value" id="stat-vistas">-</span>
-                <span class="stat-label">Vistas Totales</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-value" id="stat-usuarios">-</span>
-                <span class="stat-label">Usuarios</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-value" id="stat-comentarios">-</span>
-                <span class="stat-label">Comentarios</span>
-            </div>
+    <div class="container">
+        <div id="error-msg">
+            <i class='bx bx-lock-alt' style="font-size: 40px; margin-bottom: 15px;"></i>
+            <h3>ACCESO DENEGADO</h3>
+            <p style="font-size: 12px; margin-top: 10px; color: #888;">No tienes privilegios de administrador. Asegúrate de estar logueado con la cuenta correcta.</p>
+            <a href="/" class="btn" style="margin-top: 20px;">VOLVER AL INICIO</a>
         </div>
 
-        <div class="section">
-            <h2 class="section-title"><i class='bx bxs-hot' ></i> Top 5 Más Relevantes</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Título</th>
-                        <th>Vistas</th>
-                        <th>Comentarios</th>
-                        <th>Acción</th>
-                    </tr>
-                </thead>
-                <tbody id="top-noticias">
-                    <!-- Dinámico -->
-                </tbody>
-            </table>
+        <div id="admin-content" style="display:none;">
+            <header class="header">
+                <h1 class="logo"><span>INTLAX</span> MASTER</h1>
+                <div style="display: flex; gap: 10px;">
+                    <a href="/" class="btn btn-view"><i class='bx bx-home-alt'></i> Ver Sitio</a>
+                    <a href="/auth/logout" class="btn" style="background: var(--danger); color: white;">Salir</a>
+                </div>
+            </header>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-noticias">-</span>
+                    <span class="stat-label">Noticias</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-vistas">-</span>
+                    <span class="stat-label">Vistas</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-usuarios">-</span>
+                    <span class="stat-label">Usuarios</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value" id="stat-comentarios">-</span>
+                    <span class="stat-label">Diálogos</span>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title"><i class='bx bxs-line-chart' style="color: var(--accent);"></i> TOP 20 NOTICIAS MÁS VISTAS</h2>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Artículo</th>
+                                <th>Vistas</th>
+                                <th>Comentarios</th>
+                                <th>Fuente</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="top-noticias">
+                            <!-- Dinámico -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
+
+    <button class="btn refresh-btn" onclick="init()">
+        <i class='bx bx-refresh'></i>
+    </button>
 
     <script>
         async function init() {
+            const btn = document.querySelector('.refresh-btn i');
+            btn.classList.add('bx-spin');
+            
             try {
                 const res = await fetch('/api/v1/admin/stats');
                 if (!res.ok) {
                     document.getElementById('error-msg').style.display = 'block';
+                    document.getElementById('admin-content').style.display = 'none';
                     return;
                 }
                 const data = await res.json();
                 document.getElementById('admin-content').style.display = 'block';
+                document.getElementById('error-msg').style.display = 'none';
                 
                 // Stats
-                document.getElementById('stat-noticias').innerText = data.general.totalNoticias;
-                document.getElementById('stat-vistas').innerText = data.general.totalVistas || 0;
-                document.getElementById('stat-usuarios').innerText = data.general.totalUsuarios;
-                document.getElementById('stat-comentarios').innerText = data.general.totalComentarios;
+                document.getElementById('stat-noticias').innerText = (data.general.totalNoticias || 0).toLocaleString();
+                document.getElementById('stat-vistas').innerText = (data.general.totalVistas || 0).toLocaleString();
+                document.getElementById('stat-usuarios').innerText = (data.general.totalUsuarios || 0).toLocaleString();
+                document.getElementById('stat-comentarios').innerText = (data.general.totalComentarios || 0).toLocaleString();
 
                 // Top News
                 const tbody = document.getElementById('top-noticias');
-                tbody.innerHTML = data.masRelevantes.map(n => `
-                    <tr>
-                        <td>${n.titulo}</td>
-                        <td><i class='bx bx-show'></i> ${n.vistas}</td>
-                        <td><i class='bx bx-comment'></i> ${n.num_comentarios}</td>
-                        <td><button class="btn btn-small">Ver</button></td>
-                    </tr>
-                `).join('');
+                if (data.masRelevantes && data.masRelevantes.length > 0) {
+                    tbody.innerHTML = data.masRelevantes.map(n => `
+                        <tr>
+                            <td>
+                                <div style="font-weight: 700; color: #fff; margin-bottom: 4px;">${n.titulo}</div>
+                                <div style="font-size: 11px; color: #555;">${new Date(n.fecha_publicacion).toLocaleDateString()}</div>
+                            </td>
+                            <td><span style="color: var(--accent); font-weight: 800;">${(n.vistas || 0).toLocaleString()}</span></td>
+                            <td><i class='bx bx-comment' style="color: #666;"></i> ${n.num_comentarios}</td>
+                            <td><span class="fuente-badge">${n.fuente}</span></td>
+                            <td>
+                                <a href="/noticias/${n.id}" class="btn btn-view btn-small"><i class='bx bx-link-external'></i> Ver</a>
+                            </td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 40px; color: #555;">Sin datos disponibles aún.</td></tr>';
+                }
 
             } catch (e) {
                 document.getElementById('error-msg').style.display = 'block';
+            } finally {
+                setTimeout(() => btn.classList.remove('bx-spin'), 500);
             }
         }
         init();
