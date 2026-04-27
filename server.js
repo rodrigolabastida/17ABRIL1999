@@ -368,13 +368,13 @@ app.get('/api/v1/feed', async (req, res) => {
             return res.json(cacheFeed);
         }
 
-        // Algoritmo de Relevancia Dinámico (v2.8): (Vistas + Interacciones + Puntuación de Interés) / Tiempo
+        // Algoritmo de Relevancia "Frontera" (v3.2): Balance de Inmediatez + Interés + Tráfico Real
         const rows = await dbQuery.all(`
             SELECT n.*, 
             (
-                ( (SELECT COUNT(*) FROM registro_vistas WHERE noticia_id = n.id) * 2 + n.puntuacion + COUNT(DISTINCT c.id) * 30 + COALESCE(AVG(v.puntos), 0) * 40) 
-                * (CASE WHEN n.imageUrl LIKE '%placeholder%' THEN 0.05 ELSE 1.0 END)
-            ) / (julianday('now') - julianday(n.fecha_captura) + 0.1) as score
+                ( (n.puntuacion * 2.0) + (SELECT COUNT(*) FROM registro_vistas WHERE noticia_id = n.id) * 10 + COUNT(DISTINCT c.id) * 50 + COALESCE(AVG(v.puntos), 0) * 40) 
+                * (CASE WHEN n.imageUrl LIKE '%placeholder%' THEN 0.01 ELSE 1.0 END)
+            ) / POWER( (julianday('now') - julianday(n.fecha_captura)) * 24 + 2, 1.8) as score
             FROM noticias n
             LEFT JOIN comentarios c ON n.id = c.noticia_id
             LEFT JOIN valoraciones v ON n.id = v.noticia_id
