@@ -668,6 +668,28 @@ app.get('/api/v1/admin/stats', isAdmin, async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.get('/api/v1/admin/chart-data', isAdmin, async (req, res) => {
+    try {
+        // Histórico de Noticias (últimos 14 días)
+        const newsHistory = await dbQuery.all(`
+            SELECT date(fecha_captura) as fecha, COUNT(*) as total 
+            FROM noticias 
+            GROUP BY fecha 
+            ORDER BY fecha DESC LIMIT 14
+        `);
+        
+        // Histórico de Vistas (últimos 14 días)
+        const viewsHistory = await dbQuery.all(`
+            SELECT date(fecha) as fecha, COUNT(*) as total 
+            FROM registro_vistas 
+            GROUP BY fecha 
+            ORDER BY fecha DESC LIMIT 14
+        `);
+        
+        res.json({ newsHistory: newsHistory.reverse(), viewsHistory: viewsHistory.reverse() });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.post('/api/v1/admin/scrape-manual', isAdmin, async (req, res) => {
     try {
         const report = await fetchAllRssFeeds(true);
@@ -861,3 +883,5 @@ app.listen(PORT, () => {
     console.log(`🚀 Intlax ACTIVO en puerto ${PORT} - Iniciando con retardo de seguridad.`);
     setTimeout(fetchAllRssFeeds, 30000); // 30 segundos de gracia para el arranque
 });
+
+module.exports = { fetchAllRssFeeds };

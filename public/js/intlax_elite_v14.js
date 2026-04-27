@@ -3,7 +3,7 @@ let currentGeoPolled = false;
 let searchDebounceTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('%c 🚀 Intlax v3.4.1 ACTIVO - Deep Audit Radar Active ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
+    console.log('%c 🚀 Intlax v3.5 ACTIVO - Analytics & Charts Engine Active ', 'background: #FFCC00; color: #000; font-weight: bold; padding: 4px; border-radius: 4px;');
     localStorage.removeItem('intlax_loc_pref'); // Limpieza de rastro de versiones viejas
     
     // El Router toma el control total si estamos en una noticia
