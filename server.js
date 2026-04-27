@@ -521,7 +521,7 @@ app.get('/api/v1/comentarios', async (req, res) => {
 
 app.get('/api/v1/user-status', (req, res) => {
     if (!req.user) return res.json({});
-    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminEmail = process.env.ADMIN_EMAIL || 'brayanrodrigolabastidasilva@gmail.com';
     const userData = { ...req.user, isAdmin: (req.user.rol === 'admin' || (adminEmail && req.user.email === adminEmail)) };
     res.json(userData);
 });
@@ -555,9 +555,9 @@ app.get('/api/v1/favoritos', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Middleware Admin (Actualizado v2.9)
+// Middleware Admin (Actualizado v2.9.4)
 const isAdmin = (req, res, next) => {
-    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminEmail = process.env.ADMIN_EMAIL || 'brayanrodrigolabastidasilva@gmail.com';
     if (req.isAuthenticated() && (req.user.rol === 'admin' || (adminEmail && req.user.email === adminEmail))) {
         return next();
     }
