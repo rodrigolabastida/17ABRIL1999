@@ -412,13 +412,14 @@ app.get('/api/v1/feed', async (req, res) => {
             return res.json(cacheFeed);
         }
 
-        // Algoritmo de Relevancia "Frontera" (v3.2): Balance de Inmediatez + Interés + Tráfico Real
+        // Algoritmo de Relevancia "Frontera" (v3.5.1): Inmediatez Extrema + Bono de Frescura
         const rows = await dbQuery.all(`
             SELECT n.*, 
             (
-                ( (n.puntuacion * 2.0) + (SELECT COUNT(*) FROM registro_vistas WHERE noticia_id = n.id) * 10 + COUNT(DISTINCT c.id) * 50 + COALESCE(AVG(v.puntos), 0) * 40) 
+                ( (n.puntuacion * 2.0) + (SELECT COUNT(*) FROM registro_vistas WHERE noticia_id = n.id) * 15 + COUNT(DISTINCT c.id) * 60 + COALESCE(AVG(v.puntos), 0) * 40) 
                 * (CASE WHEN n.imageUrl LIKE '%placeholder%' THEN 0.01 ELSE 1.0 END)
-            ) / POWER( (julianday('now') - julianday(n.fecha_captura)) * 24 + 2, 1.8) as score
+                + (CASE WHEN (julianday('now') - julianday(n.fecha_captura)) * 24 < 3 THEN 500 ELSE 0 END) -- Bono Frescura 3h
+            ) / POWER( (julianday('now') - julianday(n.fecha_captura)) * 24 + 1, 2.5) as score
             FROM noticias n
             LEFT JOIN comentarios c ON n.id = c.noticia_id
             LEFT JOIN valoraciones v ON n.id = v.noticia_id
