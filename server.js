@@ -210,10 +210,16 @@ const FEED_URLS = [
     { url: 'https://www.385grados.com/feed', source: '385 Grados' },
     { url: 'https://tlaxcala.quadratin.com.mx/feed/', source: 'Quadratin Tlaxcala' },
     { url: 'https://sintesis.com.mx/tlaxcala/feed/', source: 'Síntesis Tlaxcala' },
-    { url: 'https://www.e-tlaxcala.mx/rss.xml', source: 'e-Tlaxcala' },
+    { url: 'https://www.e-tlaxcala.mx/feed/', source: 'e-Tlaxcala' },
     { url: 'https://www.elsoldetlaxcala.com.mx/rss.xml', source: 'El Sol de Tlaxcala' },
     { url: 'https://exclusivastlaxcala.com.mx/feed/', source: 'Exclusivas Tlaxcala' },
-    { url: 'https://faronoticias.com.mx/feed/', source: 'Faro Noticias' }
+    { url: 'https://faronoticias.com.mx/feed/', source: 'Faro Noticias' },
+    { url: 'https://laprensadetlaxcala.com/feed/', source: 'La Prensa de Tlaxcala' },
+    { url: 'https://www.sndigital.mx/feed/', source: 'SN Digital' },
+    { url: 'https://lineadecontraste.com/feed/', source: 'Línea de Contraste' },
+    { url: 'https://www.elcuartodeguerra.com/feed/', source: 'El Cuarto de Guerra' },
+    { url: 'https://www.alertavigilante.com/feeds/posts/default?alt=rss', source: 'Alerta Vigilante RSS' },
+    { url: 'https://www.alertavigilante.com/feeds/posts/default', source: 'Alerta Vigilante Atom' }
 ];
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -285,20 +291,7 @@ function asignarEtiquetaForo(titulo, resumen) {
 }
 
 async function fetchAllRssFeeds(force = false) {
-    if (!force) {
-        try {
-            // Usamos strftime para comparar fechas ISO de forma robusta en SQLite
-            const recentCount = await dbQuery.get("SELECT COUNT(*) as total FROM noticias WHERE datetime(fecha_captura) >= datetime('now', '-2 hours')");
-            console.log(`📊 Noticias recientes encontradas: ${recentCount.total}`);
-            if (recentCount && recentCount.total > 20) {
-                console.log('ℹ️ MODO PERSISTENTE: Usando noticias existentes en base de datos. Saltando extracción.');
-                return;
-            }
-        } catch (e) {
-            console.error('Error al verificar persistencia:', e.message);
-        }
-    }
-
+    // Eliminamos el bloqueo para asegurar extracción cada 30 min
     console.log('🔄 Extrayendo nuevos feeds RSS de internet...');
     for (const feedData of FEED_URLS) {
         try {
@@ -310,16 +303,15 @@ async function fetchAllRssFeeds(force = false) {
                 const imageUrl = await extraerUrlImagen(item);
                 const slug = generarSlug(item.title);
                 
-                // UPSERT Inteligente: No cambia el ID si ya existe, solo actualiza relevancia
+                // UPSERT Inteligente: Actualiza la puntuación pero NO infla vistas ni pisa la fecha original
                 await dbQuery.run(`
                     INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura, slug, etiqueta_foro)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(linkOriginal) DO UPDATE SET 
                         puntuacion = excluded.puntuacion,
-                        vistas = vistas + 1,
                         etiqueta_foro = COALESCE(noticias.etiqueta_foro, excluded.etiqueta_foro)
                 `, [Math.random().toString(36).substr(2, 9), item.title, summaryText, imageUrl, item.link, feedData.source, 
-                   item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(), score, 100, '', 19.31, -98.24, new Date().toISOString(), slug, etiqueta]);
+                   item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(), score, 0, '', 19.31, -98.24, new Date().toISOString(), slug, etiqueta]);
             }
         } catch (err) { 
             // Log más discreto para no alarmar al usuario si un feed falla temporalmente
@@ -329,7 +321,7 @@ async function fetchAllRssFeeds(force = false) {
     console.log('✅ Extracción completada.');
 }
 
-cron.schedule('0 * * * *', () => fetchAllRssFeeds(true));
+cron.schedule('*/30 * * * *', () => fetchAllRssFeeds(true));
 
 // Adaptador para el frontend (Normalizar nombres de campos de DB a JSON)
 function formatearFront(row) {
@@ -368,12 +360,12 @@ app.get('/api/v1/feed', async (req, res) => {
             return res.json(cacheFeed);
         }
 
-        // Algoritmo de Relevancia Dinámico Optimizado (v18.8)
+        // Algoritmo de Relevancia Dinámico (v2.8): (Vistas + Interacciones + Puntuación de Interés) / Tiempo
         const rows = await dbQuery.all(`
             SELECT n.*, 
             (
-                (n.vistas + COUNT(DISTINCT c.id) * 20 + COALESCE(AVG(v.puntos), 0) * 50) 
-                * (CASE WHEN n.imageUrl LIKE '%placeholder%' THEN 0.01 ELSE 1.0 END)
+                (n.vistas * 2 + n.puntuacion + COUNT(DISTINCT c.id) * 30 + COALESCE(AVG(v.puntos), 0) * 40) 
+                * (CASE WHEN n.imageUrl LIKE '%placeholder%' THEN 0.05 ELSE 1.0 END)
             ) / (julianday('now') - julianday(n.fecha_captura) + 0.1) as score
             FROM noticias n
             LEFT JOIN comentarios c ON n.id = c.noticia_id
