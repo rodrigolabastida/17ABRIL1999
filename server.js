@@ -135,8 +135,16 @@ async function initDB() {
                 user_id INTEGER,
                 fecha DATETIME DEFAULT (datetime('now')),
                 UNIQUE(noticia_id, user_id),
-                FOREIGN KEY (noticia_id) REFERENCES noticias(id),
                 FOREIGN KEY (user_id) REFERENCES usuarios(id)
+            );
+            CREATE TABLE IF NOT EXISTS registro_vistas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                noticia_id TEXT,
+                ip_address TEXT,
+                referer TEXT,
+                user_agent TEXT,
+                fecha DATETIME DEFAULT (datetime('now')),
+                FOREIGN KEY (noticia_id) REFERENCES noticias(id)
             );
             -- Índices de Alto Rendimiento
             CREATE INDEX IF NOT EXISTS idx_slug ON noticias(slug);
@@ -462,7 +470,18 @@ app.get('/api/v1/noticias/:slug', async (req, res) => {
         const noticia = await dbQuery.get('SELECT * FROM noticias WHERE slug = ?', [req.params.slug]);
         if (!noticia) return res.status(404).json({ error: 'Noticia no encontrada' });
         
-        await dbQuery.run('UPDATE noticias SET vistas = vistas + 1 WHERE id = ?', [noticia.id]);
+        // Registro de vista con auditoría (v3.0)
+        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+        const referer = req.headers['referer'] || 'Directo';
+        const userAgent = req.headers['user-agent'] || 'Desconocido';
+        
+        // Evitarnos auto-vistas de bots comunes
+        if (!userAgent.includes('bot') && !userAgent.includes('spider')) {
+            await dbQuery.run('UPDATE noticias SET vistas = vistas + 1 WHERE id = ?', [noticia.id]);
+            await dbQuery.run('INSERT INTO registro_vistas (noticia_id, ip_address, referer, user_agent) VALUES (?, ?, ?, ?)', 
+                [noticia.id, ip, referer, userAgent]);
+        }
+        
         const val = await dbQuery.get('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?', [noticia.id]);
         const comments = await dbQuery.all('SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil FROM comentarios c JOIN usuarios u ON c.user_id = u.id WHERE noticia_id = ? ORDER BY fecha DESC', [noticia.id]);
         res.json({ noticia: formatearFront(noticia), valoracion: val, comentarios: comments, user: req.user || null });
@@ -579,7 +598,22 @@ app.get('/api/v1/admin/stats', isAdmin, async (req, res) => {
             (SELECT COUNT(*) FROM comentarios WHERE noticia_id = noticias.id) as num_comentarios
             FROM noticias ORDER BY vistas DESC LIMIT 20
         `);
-        res.json({ general, masRelevantes });
+
+        const orígenes = await dbQuery.all(`
+            SELECT 
+                CASE 
+                    WHEN referer LIKE '%facebook.com%' THEN 'Facebook'
+                    WHEN referer LIKE '%t.co%' OR referer LIKE '%twitter.com%' THEN 'Twitter/X'
+                    WHEN referer LIKE '%google.%' THEN 'Google'
+                    WHEN referer = 'Directo' THEN 'Directo'
+                    ELSE 'Otros Sitios'
+                END as fuente,
+                COUNT(*) as total
+            FROM registro_vistas
+            GROUP BY fuente
+            ORDER BY total DESC
+        `);
+        res.json({ general, masRelevantes, orígenes });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.get('/auth/google', authConfigured, passport.authenticate('google', { scope: ['profile', 'email'] }));
