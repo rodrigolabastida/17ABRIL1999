@@ -182,8 +182,41 @@
                     </div>
                 </div>
                 <div class="section" style="margin-bottom: 0;">
-                     <h2 class="section-title"><i class='bx bxs-user-check' style="color: var(--accent);"></i> AUDITORÍA REAL</h2>
-                     <p style="font-size: 11px; color: var(--text-sec);">Las métricas ahora excluyen bots y robots de búsqueda para garantizar datos de humanos reales.</p>
+                     <h2 class="section-title"><i class='bx bxs-zap' style="color: var(--accent);"></i> ESTADO DEL SISTEMA</h2>
+                     <div id="system-status" style="display: flex; flex-direction: column; gap: 10px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:12px;">Versión Actual:</span>
+                            <span id="sys-version" style="font-weight:800; color:var(--accent);">v3.3</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:12px;">Última Modificación:</span>
+                            <span id="sys-update" style="font-size:11px; color:#888;">Hoy</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:12px;">Health:</span>
+                            <span style="color:#22C55E; font-size:11px;"><i class='bx bxs-circle'></i> ONLINE</span>
+                        </div>
+                     </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title"><i class='bx bxs-terminal' style="color: var(--accent);"></i> HISTORIAL DE EXTRACCIONES (NEWS SCRAPER)</h2>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Fecha y Hora</th>
+                                <th>Nuevas</th>
+                                <th>Actualizadas</th>
+                                <th>Estado/Errores</th>
+                                <th>MS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="extraction-logs">
+                            <!-- Dinámico -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -246,6 +279,28 @@
                     `).join('');
                 } else {
                     sourcesContainer.innerHTML = '<p style="color:#444; font-size:12px;">Sin datos de origen aún.</p>';
+                }
+
+                // System Stats
+                if (data.version_stats) {
+                    document.getElementById('sys-version').innerText = data.version_stats.current;
+                    document.getElementById('sys-update').innerText = data.version_stats.last_update;
+                }
+
+                // Extraction Logs
+                const logBody = document.getElementById('extraction-logs');
+                if (data.extracciones && data.extracciones.length > 0) {
+                    logBody.innerHTML = data.extracciones.map(log => `
+                        <tr>
+                            <td>${new Date(log.fecha).toLocaleString()}</td>
+                            <td><span style="color:#22C55E; font-weight:700;">+${log.nuevas}</span></td>
+                            <td><span style="color:var(--accent);">${log.actualizadas}</span></td>
+                            <td>${log.errores ? `<span style="color:var(--danger); font-size:10px;">Error en: ${log.errores}</span>` : '<span style="color:#22C55E;">OK</span>'}</td>
+                            <td style="color:#555; font-size:11px;">${log.duracion_ms}ms</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    logBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#555;">Esperando primera extracción...</td></tr>';
                 }
 
                 // Top News

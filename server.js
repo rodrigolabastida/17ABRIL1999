@@ -146,6 +146,14 @@ async function initDB() {
                 fecha DATETIME DEFAULT (datetime('now')),
                 FOREIGN KEY (noticia_id) REFERENCES noticias(id)
             );
+            CREATE TABLE IF NOT EXISTS historial_extraccion (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha DATETIME DEFAULT (datetime('now')),
+                nuevas INTEGER,
+                actualizadas INTEGER,
+                errores TEXT,
+                duracion_ms INTEGER
+            );
             -- Índices de Alto Rendimiento
             CREATE INDEX IF NOT EXISTS idx_slug ON noticias(slug);
             CREATE INDEX IF NOT EXISTS idx_relevancia ON noticias(fecha_captura, puntuacion);
@@ -301,6 +309,11 @@ function asignarEtiquetaForo(titulo, resumen) {
 async function fetchAllRssFeeds(force = false) {
     // Eliminamos el bloqueo para asegurar extracción cada 30 min
     console.log('🔄 Extrayendo nuevos feeds RSS de internet...');
+    const startTime = Date.now();
+    let nuevas = 0;
+    let actualizadas = 0;
+    let erroresArr = [];
+
     for (const feedData of FEED_URLS) {
         try {
             const feed = await parser.parseURL(feedData.url);
@@ -311,8 +324,7 @@ async function fetchAllRssFeeds(force = false) {
                 const imageUrl = await extraerUrlImagen(item);
                 const slug = generarSlug(item.title);
                 
-                // UPSERT Inteligente: Actualiza la puntuación pero NO infla vistas ni pisa la fecha original
-                await dbQuery.run(`
+                const res = await dbQuery.run(`
                     INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura, slug, etiqueta_foro)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(linkOriginal) DO UPDATE SET 
@@ -320,13 +332,23 @@ async function fetchAllRssFeeds(force = false) {
                         etiqueta_foro = COALESCE(noticias.etiqueta_foro, excluded.etiqueta_foro)
                 `, [Math.random().toString(36).substr(2, 9), item.title, summaryText, imageUrl, item.link, feedData.source, 
                    item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(), score, 0, '', 19.31, -98.24, new Date().toISOString(), slug, etiqueta]);
+                
+                if (res.changes > 0) {
+                    if (res.lastID) nuevas++; 
+                    else actualizadas++;
+                }
             }
         } catch (err) { 
-            // Log más discreto para no alarmar al usuario si un feed falla temporalmente
-            console.log(`⚠️ Fuente ${feedData.source} no disponible temporalmente.`); 
+            console.log(`⚠️ Fuente ${feedData.source} no disponible.`); 
+            erroresArr.push(feedData.source);
         }
     }
-    console.log('✅ Extracción completada.');
+    
+    const duration = Date.now() - startTime;
+    await dbQuery.run('INSERT INTO historial_extraccion (nuevas, actualizadas, errores, duracion_ms) VALUES (?, ?, ?, ?)', 
+        [nuevas, actualizadas, erroresArr.join(', '), duration]);
+        
+    console.log(`✅ Extracción completada: ${nuevas} nuevas, ${actualizadas} actualizadas.`);
 }
 
 cron.schedule('*/30 * * * *', () => fetchAllRssFeeds(true));
@@ -616,7 +638,11 @@ app.get('/api/v1/admin/stats', isAdmin, async (req, res) => {
             GROUP BY fuente
             ORDER BY total DESC
         `);
-        res.json({ general, masRelevantes, orígenes });
+
+        // Logs de extracción (v3.3)
+        const extracciones = await dbQuery.all('SELECT * FROM historial_extraccion ORDER BY fecha DESC LIMIT 10');
+        
+        res.json({ general, masRelevantes, orígenes, extracciones, version_stats: { current: 'v3.3', last_update: 'Hoy (Motor de Logs)' } });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 app.get('/auth/google', authConfigured, passport.authenticate('google', { scope: ['profile', 'email'] }));
