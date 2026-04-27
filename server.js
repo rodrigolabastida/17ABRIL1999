@@ -224,19 +224,18 @@ function generarSlug(texto) {
 
 // Fuentes RSS
 const FEED_URLS = [
-    { url: 'https://www.385grados.com/feed', source: '385 Grados' },
-    { url: 'https://tlaxcala.quadratin.com.mx/feed/', source: 'Quadratin Tlaxcala' },
-    { url: 'https://sintesis.com.mx/tlaxcala/feed/', source: 'Síntesis Tlaxcala' },
-    { url: 'https://www.e-tlaxcala.mx/feed/', source: 'e-Tlaxcala' },
     { url: 'https://www.elsoldetlaxcala.com.mx/rss.xml', source: 'El Sol de Tlaxcala' },
-    { url: 'https://exclusivastlaxcala.com.mx/feed/', source: 'Exclusivas Tlaxcala' },
+    { url: 'https://tlaxcala.quadratin.com.mx/feed/', source: 'Quadratín Tlaxcala' },
+    { url: 'https://sintesis.com.mx/tlaxcala/feed/', source: 'Síntesis Tlaxcala' },
+    { url: 'https://e-tlaxcala.mx/feed/', source: 'e-Tlaxcala' },
+    { url: 'https://www.gentetlx.com.mx/feed/', source: 'Gentetlx' },
+    { url: 'https://www.monitortlaxcala.com.mx/feed/', source: 'Monitor Tlaxcala' },
+    { url: 'https://tlaxcaladigital.com/feed/', source: 'Tlaxcala Digital' },
+    { url: 'https://www.385grados.com/feed/', source: '385 Grados' },
     { url: 'https://faronoticias.com.mx/feed/', source: 'Faro Noticias' },
+    { url: 'https://exclusivastlaxcala.com.mx/feed/', source: 'Exclusivas Tlaxcala' },
     { url: 'https://laprensadetlaxcala.com/feed/', source: 'La Prensa de Tlaxcala' },
-    { url: 'https://www.sndigital.mx/feed/', source: 'SN Digital' },
-    { url: 'https://lineadecontraste.com/feed/', source: 'Línea de Contraste' },
-    { url: 'https://www.elcuartodeguerra.com/feed/', source: 'El Cuarto de Guerra' },
-    { url: 'https://www.alertavigilante.com/feeds/posts/default?alt=rss', source: 'Alerta Vigilante RSS' },
-    { url: 'https://www.alertavigilante.com/feeds/posts/default', source: 'Alerta Vigilante Atom' }
+    { url: 'https://revistacodigo24.com/feed/', source: 'Código 24' }
 ];
 
 app.use(express.static(path.join(__dirname, 'public')));

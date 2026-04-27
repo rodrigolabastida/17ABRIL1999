@@ -6,9 +6,14 @@ const FEED_URLS = [
     { url: 'https://www.elsoldetlaxcala.com.mx/rss.xml', source: 'El Sol de Tlaxcala' },
     { url: 'https://tlaxcala.quadratin.com.mx/feed/', source: 'Quadratín Tlaxcala' },
     { url: 'https://sintesis.com.mx/tlaxcala/feed/', source: 'Síntesis Tlaxcala' },
-    { url: 'https://www.elgrafico.mx/rss/secciones/noticias/30', source: 'El Gráfico' },
-    { url: 'https://agenciadenoticiastlaxcala.com/feed/', source: 'ANT Tlaxcala' },
-    { url: 'https://www.e-tlaxcala.mx/rss.xml', source: 'e-Tlaxcala' },
+    { url: 'https://e-tlaxcala.mx/feed/', source: 'e-Tlaxcala' },
+    { url: 'https://www.gentetlx.com.mx/feed/', source: 'Gentetlx' },
+    { url: 'https://www.monitortlaxcala.com.mx/feed/', source: 'Monitor Tlaxcala' },
+    { url: 'https://tlaxcaladigital.com/feed/', source: 'Tlaxcala Digital' },
+    { url: 'https://www.385grados.com/feed/', source: '385 Grados' },
+    { url: 'https://faronoticias.com.mx/feed/', source: 'Faro Noticias' },
+    { url: 'https://exclusivastlaxcala.com.mx/feed/', source: 'Exclusivas Tlaxcala' },
+    { url: 'https://laprensadetlaxcala.com/feed/', source: 'La Prensa de Tlaxcala' },
     { url: 'https://revistacodigo24.com/feed/', source: 'Código 24' }
 ];
 
