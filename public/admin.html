@@ -390,17 +390,20 @@
 
                 log.innerHTML = data.reporteCalidad.map(item => {
                     let color = item.calidad >= 80 ? '#22C55E' : (item.calidad >= 60 ? '#FFCC00' : '#EF4444');
+                    let statusColor = item.status === 'Nueva' ? '#22C55E' : '#3B82F6';
                     return `
                         <div style="border-bottom:1px solid #222; padding:10px 0;">
                             <p style="color:#fff; font-weight:700;">[${item.fuente}] ${item.titulo}</p>
-                            <p style="color:${color}; font-size:11px;">Calidad: ${item.calidad}% - 
-                            ${item.detalles.foto ? '✅ Foto' : '❌ Sin Foto'} | 
-                            ${item.detalles.texto ? '✅ Resumen' : '❌ Texto Breve'} | 
-                            ${item.detalles.autor ? '✅ Autor' : '❌ Autor Genérico'}
+                            <p style="color:${color}; font-size:11px;">
+                                <span style="background:${statusColor}; color:#fff; padding:2px 5px; border-radius:4px; font-weight:800; margin-right:8px;">${item.status}</span>
+                                Calidad: ${item.calidad}% | 
+                                ${item.detalles.foto ? '✅ Foto' : '❌ Sin Foto'} | 
+                                ${item.detalles.texto ? '✅ Resumen' : '❌ Texto Breve'} | 
+                                ${item.detalles.autor ? '✅ Autor' : '❌ Autor Genérico'}
                             </p>
                         </div>
                     `;
-                }).join('') + `<p style="color:var(--accent); margin-top:10px;">> ESCANEO FINALIZADO. ${data.nuevas} noticias inyectadas con éxito.</p>`;
+                }).join('') + `<p style="color:var(--accent); margin-top:10px;">> ESCANEO FINALIZADO. ${data.nuevas} nuevas noticias inyectadas.</p>`;
                 
                 init(); // Refrescar stats generales
             } catch (e) {

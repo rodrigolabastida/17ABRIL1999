@@ -343,16 +343,22 @@ async function fetchAllRssFeeds(force = false) {
                 `, [Math.random().toString(36).substr(2, 9), item.title, summaryText, imageUrl, item.link, feedData.source, 
                    item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(), score, 0, '', 19.31, -98.24, new Date().toISOString(), slug, etiqueta, autor]);
                 
+                let status = 'Existente';
                 if (res.changes > 0) {
-                    if (res.lastID) nuevas++; 
-                    else actualizadas++;
+                    if (res.lastID && res.lastID > 0) { 
+                        nuevas++; 
+                        status = 'Nueva';
+                    } else {
+                        actualizadas++;
+                    }
                 }
 
                 reporteCalidad.push({
                     titulo: item.title,
                     fuente: feedData.source,
                     calidad: qPoints,
-                    detalles: { foto: !!qPoints, texto: summaryText.length > 50, autor: autor !== feedData.source }
+                    status: status,
+                    detalles: { foto: !!imageUrl, texto: summaryText.length > 50, autor: autor !== feedData.source }
                 });
             }
         } catch (err) { 
