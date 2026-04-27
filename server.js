@@ -280,6 +280,46 @@ function extractSummary(desc) {
     return text.length > 250 ? text.slice(0, 250) + '...' : text || "Sin resumen disponible.";
 }
 
+// Selectores para Deep Scraping (v3.8)
+const DEEP_SELECTORS = {
+    'e-Tlaxcala': { url: 'https://e-tlaxcala.mx/', item: 'article', title: 'h2', link: 'a', img: 'img' },
+    'Gentetlx': { url: 'https://www.gentetlx.com.mx/', item: '.post-item', title: '.post-title', link: 'a', img: 'img' }
+};
+
+async function deepScrapeFallback(sourceName) {
+    const config = DEEP_SELECTORS[sourceName];
+    if (!config) return [];
+    
+    try {
+        const response = await fetch(config.url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36' } });
+        const html = await response.text();
+        const $ = cheerio.load(html);
+        const results = [];
+
+        $(config.item).slice(0, 10).each((i, el) => {
+            const title = $(el).find(config.title).text().trim();
+            let link = $(el).find(config.link).attr('href');
+            const img = $(el).find(config.img).attr('src') || $(el).find(config.img).attr('data-src');
+
+            if (title && link) {
+                if (!link.startsWith('http')) link = new URL(link, config.url).href;
+                results.push({
+                    title,
+                    link,
+                    img,
+                    contentSnippet: 'Extraído vía Deep Scan (Sin RSS)',
+                    pubDate: new Date().toISOString(),
+                    creator: sourceName
+                });
+            }
+        });
+        return results;
+    } catch (e) {
+        console.error(`❌ Fallo en Deep Scraping para ${sourceName}:`, e.message);
+        return [];
+    }
+}
+
 function calcularInteres(titulo, resumen) {
     let puntuacion = 50;
     const txtTitulo = (titulo || "").toLowerCase();
@@ -314,17 +354,25 @@ async function fetchAllRssFeeds(force = false) {
     let reporteCalidad = [];
 
     for (const feedData of FEED_URLS) {
+        let itemsToProcess = [];
         try {
             const feed = await parser.parseURL(feedData.url);
-            for (const item of feed.items.slice(0, 5)) { // Limitamos a 5 por fuente para el reporte manual rápido
-                const summaryText = extractSummary(item.description || item.content);
+            itemsToProcess = feed.items.slice(0, 5);
+        } catch (err) { 
+            console.log(`⚠️ RSS ${feedData.source} falló. Activando Deep Scraper...`);
+            itemsToProcess = await deepScrapeFallback(feedData.source);
+            if (itemsToProcess.length === 0) erroresArr.push(feedData.source);
+        }
+
+        for (const item of itemsToProcess) {
+            try {
+                const summaryText = extractSummary(item.description || item.content || item.contentSnippet);
                 const score = calcularInteres(item.title, summaryText);
                 const etiqueta = asignarEtiquetaForo(item.title, summaryText);
-                const imageUrl = await extraerUrlImagen(item);
+                const imageUrl = item.img || await extraerUrlImagen(item); // Usar img de Deep Scan si existe
                 const slug = generarSlug(item.title);
                 const autor = item.creator || item.author || feedData.source;
                 
-                // Cálculo de Calidad (v3.4)
                 let qPoints = 0;
                 if (imageUrl && !imageUrl.includes('placeholder')) qPoints += 20;
                 if (summaryText && summaryText.length > 50) qPoints += 20;
@@ -359,9 +407,9 @@ async function fetchAllRssFeeds(force = false) {
                     status: status,
                     detalles: { foto: !!imageUrl, texto: summaryText.length > 50, autor: autor !== feedData.source }
                 });
+            } catch (itemErr) {
+                console.log(`❌ Error procesando item de ${feedData.source}`);
             }
-        } catch (err) { 
-            erroresArr.push(feedData.source);
         }
     }
     
