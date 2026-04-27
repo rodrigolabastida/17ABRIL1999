@@ -372,7 +372,7 @@ app.get('/api/v1/feed', async (req, res) => {
         const rows = await dbQuery.all(`
             SELECT n.*, 
             (
-                (n.vistas * 2 + n.puntuacion + COUNT(DISTINCT c.id) * 30 + COALESCE(AVG(v.puntos), 0) * 40) 
+                ( (SELECT COUNT(*) FROM registro_vistas WHERE noticia_id = n.id) * 2 + n.puntuacion + COUNT(DISTINCT c.id) * 30 + COALESCE(AVG(v.puntos), 0) * 40) 
                 * (CASE WHEN n.imageUrl LIKE '%placeholder%' THEN 0.05 ELSE 1.0 END)
             ) / (julianday('now') - julianday(n.fecha_captura) + 0.1) as score
             FROM noticias n
@@ -591,12 +591,15 @@ app.get('/api/v1/admin/stats', isAdmin, async (req, res) => {
                 (SELECT COUNT(*) FROM noticias) as totalNoticias,
                 (SELECT COUNT(*) FROM usuarios) as totalUsuarios,
                 (SELECT COUNT(*) FROM comentarios) as totalComentarios,
-                (SELECT SUM(vistas) FROM noticias) as totalVistas
+                (SELECT COUNT(*) FROM registro_vistas) as totalVistas
         `);
         const masRelevantes = await dbQuery.all(`
-            SELECT id, titulo, vistas, fuente, fecha_publicacion,
+            SELECT id, titulo, fuente, fecha_publicacion,
+            (SELECT COUNT(*) FROM registro_vistas WHERE noticia_id = noticias.id) as vistas,
             (SELECT COUNT(*) FROM comentarios WHERE noticia_id = noticias.id) as num_comentarios
-            FROM noticias ORDER BY vistas DESC LIMIT 20
+            FROM noticias 
+            WHERE vistas > 0 OR num_comentarios > 0
+            ORDER BY vistas DESC, num_comentarios DESC LIMIT 20
         `);
 
         const orígenes = await dbQuery.all(`
