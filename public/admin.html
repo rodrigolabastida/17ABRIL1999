@@ -255,14 +255,25 @@
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+            <div style="display: grid; grid-template-columns: 1fr; gap: 25px; margin-bottom: 25px;">
                 <div class="section" style="margin-bottom:0;">
-                    <h2 class="section-title"><i class='bx bx-line-chart' style="color:var(--accent);"></i> VOLUMEN DE NOTICIAS</h2>
-                    <canvas id="newsChart" height="150"></canvas>
+                    <h2 class="section-title"><i class='bx bx-line-chart' style="color:var(--accent);"></i> CRECIMIENTO DE CONTENIDO (Histórico 14 días)</h2>
+                    <div style="height: 350px; position: relative;">
+                        <canvas id="newsChart"></canvas>
+                    </div>
                 </div>
                 <div class="section" style="margin-bottom:0;">
-                    <h2 class="section-title"><i class='bx bxs-show' style="color:var(--accent);"></i> TRÁFICO DIARIO</h2>
-                    <canvas id="viewsChart" height="150"></canvas>
+                    <h2 class="section-title"><i class='bx bxs-show' style="color:var(--accent);"></i> IMPACTO DE AUDIENCIA (Histórico 14 días)</h2>
+                    <div style="height: 350px; position: relative;">
+                        <canvas id="viewsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2 class="section-title"><i class='bx bxs-institution' style="color:var(--accent);"></i> INVENTARIO MAESTRO DE MEDIOS</h2>
+                <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px;" id="media-inventory-list">
+                    <!-- Dinámico -->
                 </div>
             </div>
 
@@ -443,13 +454,22 @@
                             label: 'Noticias Inyectadas',
                             data: data.newsHistory.map(d => d.total),
                             borderColor: '#FFCC00',
-                            backgroundColor: 'rgba(255, 204, 0, 0.1)',
-                            borderWidth: 3,
+                            backgroundColor: 'rgba(255, 204, 0, 0.2)',
+                            borderWidth: 4,
                             fill: true,
-                            tension: 0.4
+                            tension: 0.4,
+                            pointRadius: 5,
+                            pointBackgroundColor: '#FFCC00'
                         }]
                     },
-                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: '#222' } }, x: { grid: { display: false } } } }
+                    options: { 
+                        maintainAspectRatio: false, 
+                        plugins: { legend: { display: false } }, 
+                        scales: { 
+                            y: { beginAtZero: true, grid: { color: '#222' }, ticks: { color: '#888' } }, 
+                            x: { grid: { display: false }, ticks: { color: '#888' } } 
+                        } 
+                    }
                 });
 
                 new Chart(ctxViews, {
@@ -460,11 +480,34 @@
                             label: 'Vistas Reales',
                             data: data.viewsHistory.map(d => d.total),
                             backgroundColor: '#3B82F6',
-                            borderRadius: 6
+                            borderRadius: 10,
+                            hoverBackgroundColor: '#60A5FA'
                         }]
                     },
-                    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: '#222' } }, x: { grid: { display: false } } } }
+                    options: { 
+                        maintainAspectRatio: false, 
+                        plugins: { legend: { display: false } }, 
+                        scales: { 
+                            y: { beginAtZero: true, grid: { color: '#222' }, ticks: { color: '#888' } }, 
+                            x: { grid: { display: false }, ticks: { color: '#888' } } 
+                        } 
+                    }
                 });
+
+                // Inventario por Medios (v3.7)
+                const inventoryList = document.getElementById('media-inventory-list');
+                if (data.mediaInventory) {
+                    inventoryList.innerHTML = data.mediaInventory.map(m => `
+                        <div style="background:#111; border:1px solid #222; border-radius:15px; padding:20px; text-align:center; transition:0.3s; cursor:default;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='#222'">
+                            <p style="font-size:10px; color:#555; text-transform:uppercase; font-weight:800; margin-bottom:5px;">${m.fuente}</p>
+                            <p style="font-size:24px; font-weight:800; color:#fff; margin:0;">${m.total_noticias}</p>
+                            <p style="font-size:10px; color:var(--accent); font-weight:700; margin-top:2px;">NOTICIAS</p>
+                            <div style="margin-top:10px; padding-top:10px; border-top:1px solid #222; font-size:11px; color:#666;">
+                                <i class='bx bxs-show'></i> ${m.total_vistas || 0} IMPACTOS
+                            </div>
+                        </div>
+                    `).join('');
+                }
 
             } catch (e) { console.error('Error cargando gráficas:', e); }
         }

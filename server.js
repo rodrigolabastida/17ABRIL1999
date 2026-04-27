@@ -685,8 +685,16 @@ app.get('/api/v1/admin/chart-data', isAdmin, async (req, res) => {
             GROUP BY fecha 
             ORDER BY fecha DESC LIMIT 14
         `);
+
+        // Inventario por Medios (v3.7)
+        const mediaInventory = await dbQuery.all(`
+            SELECT fuente, COUNT(*) as total_noticias, SUM(vistas) as total_vistas 
+            FROM noticias 
+            GROUP BY fuente 
+            ORDER BY total_noticias DESC
+        `);
         
-        res.json({ newsHistory: newsHistory.reverse(), viewsHistory: viewsHistory.reverse() });
+        res.json({ newsHistory: newsHistory.reverse(), viewsHistory: viewsHistory.reverse(), mediaInventory });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
