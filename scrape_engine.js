@@ -1,6 +1,15 @@
 const Parser = require('rss-parser');
-const sqlite3 = require('sqlite3').verbose();
-const parser = new Parser();
+const mysql = require('mysql2/promise');
+const parser = new Parser({
+    customFields: {
+        item: [
+            ['media:content', 'mediaContent'],
+            ['enclosure', 'enclosure'],
+            ['content:encoded', 'contentEncoded']
+        ]
+    }
+});
+require('dotenv').config();
 
 const FEED_URLS = [
     { url: 'https://news.google.com/rss/search?q=Tlaxcala&hl=es-419&gl=MX&ceid=MX:es-419', source: 'Google News' },
@@ -18,60 +27,76 @@ const FEED_URLS = [
     { url: 'https://revistacodigo24.com/feed/', source: 'Código 24' }
 ];
 
-const db = new sqlite3.Database('./intlax.db');
-
-function runQuery(sql, params) {
-    return new Promise((resolve, reject) => {
-        db.run(sql, params, function(err) {
-            if (err) reject(err);
-            else resolve(this);
-        });
-    });
-}
-
 async function run() {
-    console.log('🔄 Iniciando Barrido Maestro de Noticias (v3.4.2)...');
+    console.log('🔄 Iniciando Extractor MariaDB v6.0...');
+    
+    let connection;
+    try {
+        connection = await mysql.createConnection({
+            host: process.env.DB_HOST || '127.0.0.1',
+            user: process.env.DB_USER || 'u653801218_master',
+            password: process.env.DB_PASSWORD || 'IntlaxAdmin2026',
+            database: process.env.DB_NAME || 'u653801218_intlax_v6'
+        });
+        console.log('🔗 Conexión a MariaDB establecida.');
+    } catch (err) {
+        console.error('❌ Error de conexión:', err.message);
+        return;
+    }
+
     let nuevas = 0;
     let total = 0;
 
     for (const feedData of FEED_URLS) {
         try {
-            process.stdout.write(`📡 Conectando con ${feedData.source}... `);
+            process.stdout.write(`📡 Sincronizando ${feedData.source}... `);
             const feed = await parser.parseURL(feedData.url);
-            console.log(`OK (${feed.items.length} notas halladas)`);
+            console.log(`OK (${feed.items.length} notas)`);
             
-            for (const item of feed.items.slice(0, 15)) {
+            for (const item of feed.items.slice(0, 20)) {
                 total++;
                 const slug = item.title.toLowerCase()
                             .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
                             .replace(/ /g, '-').replace(/[^\w-]+/g, '');
-                            
+
+                // Lógica de Extracción de Imagen Robusta
+                let img = '/img/placeholder-noticia.jpg';
+                if (item.enclosure && item.enclosure.url) img = item.enclosure.url;
+                else if (item.mediaContent && item.mediaContent.$ && item.mediaContent.$.url) img = item.mediaContent.$.url;
+                else if (item.contentEncoded) {
+                    const match = item.contentEncoded.match(/<img[^>]+src="([^">]+)"/);
+                    if (match) img = match[1];
+                }
+                
+                // Si es de Google News, intentamos limpiar la URL de la imagen si viniera en el snippet
+                if (feedData.source === 'Google News' && img.includes('placeholder')) {
+                     const matchSnippet = (item.content || '').match(/src="([^">]+)"/);
+                     if (matchSnippet) img = matchSnippet[1];
+                }
+
                 try {
-                    const res = await runQuery(`
+                    const [res] = await connection.execute(`
                         INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura, slug, etiqueta_foro, autor, categoria_impacto, municipio_tag, multiplicador_categoria)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(linkOriginal) DO NOTHING
-                    `, [Math.random().toString(36).substr(2, 9), 
-                       item.title, 
-                       (item.contentSnippet || item.content || '').substring(0, 300), 
-                       '', 
-                       item.link, 
-                       feedData.source, 
-                       item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(), 
-                       60, 
-                       0, 
-                       '', 19.31, -98.24, 
-                       new Date().toISOString(), 
-                       slug, 
-                       'DEBATE',
-                       item.creator || item.author || feedData.source,
-                       'GENERAL',
-                       'OTRO',
-                       1.0
+                        ON DUPLICATE KEY UPDATE vistas = vistas + 0
+                    `, [
+                        Math.random().toString(36).substr(2, 9), 
+                        item.title, 
+                        (item.contentSnippet || item.content || '').substring(0, 300), 
+                        img, 
+                        item.link, 
+                        feedData.source, 
+                        item.pubDate ? new Date(item.pubDate).toISOString().slice(0, 19).replace('T', ' ') : new Date().toISOString().slice(0, 19).replace('T', ' '), 
+                        60, 0, '', 19.31, -98.24, 
+                        new Date().toISOString().slice(0, 19).replace('T', ' '), 
+                        slug, 'DEBATE',
+                        item.creator || item.author || feedData.source,
+                        'GENERAL', 'OTRO', 1.0
                     ]);
-                    if (res.changes > 0) nuevas++;
+                    
+                    if (res.affectedRows === 1) nuevas++;
                 } catch (dbErr) {
-                    // Ignoramos duplicados
+                    // console.error(dbErr.message);
                 }
             }
         } catch (e) {
@@ -79,12 +104,11 @@ async function run() {
         }
     }
     
-    console.log(`\n🎉 BARRIDO COMPLETADO.`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`\n🎉 EXTRACCIÓN MARIADB COMPLETADA.`);
     console.log(`✅ Noticias Nuevas: ${nuevas}`);
     console.log(`📝 Total Analizadas: ${total}`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    db.close();
+    
+    await connection.end();
 }
 
 run();
