@@ -357,12 +357,12 @@ function formatearFront(row) {
         summary: row.resumen,
         source: row.fuente,
         views: row.vistas || 0,
-        imageUrl: row.imageUrl,
+        imageUrl: row.imageUrl && row.imageUrl !== '' ? row.imageUrl : '/img/placeholder-noticia.jpg',
         link: row.linkOriginal,
         slug: row.slug,
         puntuacion: row.puntuacion || 3,
         time: row.fecha_publicacion ? new Date(row.fecha_publicacion).toLocaleDateString() : 'Hoy',
-        image: row.imageUrl || '/img/placeholder-noticia.jpg'
+        image: row.imageUrl && row.imageUrl !== '' ? row.imageUrl : '/img/placeholder-noticia.jpg'
     };
 }
 
