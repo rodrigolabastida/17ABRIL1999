@@ -887,4 +887,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { fetchAllRssFeeds };
+module.exports = app; // Exportamos para que Passenger (Hostinger) tome el control
