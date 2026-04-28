@@ -392,37 +392,36 @@ function formatearFront(row) {
     };
 }
 
-// API v1 con Caché en Memoria para velocidad extrema
+app.use(express.static(path.join(__dirname, 'public')));
+
 let cacheFeed = null;
 let lastCacheTime = 0;
 
 app.get('/api/v1/feed', async (req, res) => {
     try {
         const ahora = Date.now();
-        if (cacheFeed && (ahora - lastCacheTime < 600000)) {
+        if (cacheFeed && (ahora - lastCacheTime < 60000)) { // 1 min cache
             return res.json(cacheFeed);
         }
 
-        // Algoritmo Ultra-Ligero 4.0.4: Máxima compatibilidad y velocidad
+        // Consulta Ultra-Simple (Fuerza Bruta) para garantizar que abra
         const rows = await dbQuery.all(`
-            SELECT n.*, 
-            (
-                (n.puntuacion * 2.0) + (n.vistas * 0.5) 
-                + (CASE WHEN (julianday('now') - julianday(n.fecha_captura)) * 24 < 3 THEN 500 ELSE 0 END)
-            ) / POWER( (julianday('now') - julianday(n.fecha_captura)) * 24 + 1, 1.5) as score
-            FROM noticias n
-            ORDER BY score DESC 
+            SELECT * FROM noticias 
+            ORDER BY fecha_captura DESC 
             LIMIT 40
         `);
         
-        if (!rows.length) return res.json({ noticiaPrincipal: null, noticiasSecundarias: [] });
+        if (!rows || !rows.length) return res.json({ noticiaPrincipal: null, noticiasSecundarias: [] });
         
         const articles = rows.map(formatearFront);
         cacheFeed = { noticiaPrincipal: articles[0], noticiasSecundarias: articles.slice(1) };
         lastCacheTime = ahora;
         
         res.json(cacheFeed);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) { 
+        console.error('API Error:', err.message);
+        res.json({ noticiaPrincipal: null, noticiasSecundarias: [] }); 
+    }
 });
 
 // Endpoint de Foros: Noticias ordenadas por interacción reciente
@@ -877,7 +876,7 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public/home.html')
 
 if (require.main === module) {
     app.listen(PORT, () => {
-        console.log(`🚀 Intlax v5.0 ACTIVO en puerto ${PORT}`);
+        console.log(`🚀 Intlax v5.1 ACTIVO en puerto ${PORT}`);
         console.log('⚡ Iniciando motores secundarios...');
         
         // Ejecutar inicialización de DB sin bloquear el servidor
