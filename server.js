@@ -349,9 +349,19 @@ async function fetchAllRssFeeds(force = false) {
 cron.schedule('*/30 * * * *', () => fetchAllRssFeeds(true));
 
 function formatearFront(row) {
+    if (!row) return null;
     return {
         ...row,
-        time: new Date(row.fecha_publicacion).toLocaleDateString(),
+        id: row.id,
+        title: row.titulo,
+        summary: row.resumen,
+        source: row.fuente,
+        views: row.vistas || 0,
+        imageUrl: row.imageUrl,
+        link: row.linkOriginal,
+        slug: row.slug,
+        puntuacion: row.puntuacion || 3,
+        time: row.fecha_publicacion ? new Date(row.fecha_publicacion).toLocaleDateString() : 'Hoy',
         image: row.imageUrl || '/img/placeholder-noticia.jpg'
     };
 }
@@ -364,7 +374,7 @@ app.get('/api/v1/feed', async (req, res) => {
         
         if (dbType === 'mariadb') {
             query = `
-                SELECT noticias.*, 
+                SELECT *, 
                 (
                     (vistas + 
                     (5 * LEAST((SELECT COUNT(*) FROM comentarios WHERE noticia_id = noticias.id), 20)) + 
@@ -378,26 +388,15 @@ app.get('/api/v1/feed', async (req, res) => {
                 LIMIT 100
             `;
         } else {
-            // Versión SQLite optimizada
-            query = `
-                SELECT *, 
-                (
-                    (vistas + (10 * votos_positivos_count)) * 
-                    multiplicador_categoria * 
-                    CASE WHEN municipio_tag = ? THEN 2.0 ELSE 1.0 END
-                ) / 
-                ( ( (julianday('now') - julianday(fecha_captura)) * 24 ) + 2 ) as ranking_final
-                FROM noticias 
-                ORDER BY ranking_final DESC 
-                LIMIT 100
-            `;
+            query = `SELECT *, 1.0 as ranking_final FROM noticias ORDER BY fecha_captura DESC LIMIT 100`;
         }
         
         const rows = await dbQuery.all(query, [userMunicipio]);
+        const formatted = rows.map(formatearFront);
+        
         res.json({ 
-            noticiaPrincipal: rows[0] || null, 
-            noticiasSecundarias: rows.slice(1, 4), 
-            feed: rows.slice(4) 
+            noticiaPrincipal: formatted[0] || null, 
+            noticiasSecundarias: formatted.slice(1)
         });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
