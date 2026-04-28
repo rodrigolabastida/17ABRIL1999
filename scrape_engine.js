@@ -48,8 +48,9 @@ async function run() {
                             
                 try {
                     const res = await runQuery(`
-                        INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura, slug, etiqueta_foro, autor)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura, slug, etiqueta_foro, autor, categoria_impacto, municipio_tag, multiplicador_categoria)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(linkOriginal) DO NOTHING
                     `, [Math.random().toString(36).substr(2, 9), 
                        item.title, 
                        (item.contentSnippet || item.content || '').substring(0, 300), 
@@ -63,11 +64,14 @@ async function run() {
                        new Date().toISOString(), 
                        slug, 
                        'DEBATE',
-                       item.creator || item.author || feedData.source
+                       item.creator || item.author || feedData.source,
+                       'GENERAL',
+                       'OTRO',
+                       1.0
                     ]);
                     if (res.changes > 0) nuevas++;
                 } catch (dbErr) {
-                    // Ignoramos si el link ya existe (Unique constraint)
+                    // Ignoramos duplicados
                 }
             }
         } catch (e) {

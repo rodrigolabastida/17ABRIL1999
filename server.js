@@ -10,6 +10,7 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const sqlite3 = require('sqlite3').verbose();
 
 // Configuración de variables de entorno con respaldo para Hostinger
 const localEnv = path.join(__dirname, '.env');
@@ -65,7 +66,10 @@ const parser = new Parser({
 
 const PORT = process.env.PORT || 3000;
 
-// Configuración de Pool de MariaDB
+// Configuración de Pool de MariaDB con respaldo SQLite
+let dbType = 'mariadb';
+let sqliteDB = null;
+
 const pool = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
@@ -79,19 +83,56 @@ const pool = mysql.createPool({
 const dbQuery = {
     execute: async (sql, params = []) => {
         try {
-            const [results] = await pool.execute(sql, params);
-            return results;
+            if (dbType === 'mariadb') {
+                const [results] = await pool.execute(sql, params);
+                return results;
+            } else {
+                return new Promise((resolve, reject) => {
+                    // Convert ? to $1, $2 or just keep ? for sqlite3
+                    sqliteDB.run(sql.replace(/ON DUPLICATE KEY UPDATE/g, 'ON CONFLICT(linkOriginal) DO UPDATE SET').replace(/VALUES\((\w+)\)/g, 'EXCLUDED.$1'), params, function(err) {
+                        if (err) reject(err);
+                        else resolve({ affectedRows: this.changes, insertId: this.lastID });
+                    });
+                });
+            }
         } catch (err) {
-            console.error('❌ DB Error:', err.message);
+            console.error(`❌ DB Error (${dbType}):`, err.message);
             throw err;
         }
     },
     get: async (sql, params = []) => {
         try {
-            const [rows] = await pool.execute(sql, params);
-            return rows[0] || null;
+            if (dbType === 'mariadb') {
+                const [rows] = await pool.execute(sql, params);
+                return rows[0] || null;
+            } else {
+                return new Promise((resolve, reject) => {
+                    sqliteDB.get(sql, params, (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row || null);
+                    });
+                });
+            }
         } catch (err) {
-            console.error('❌ DB Error:', err.message);
+            console.error(`❌ DB Error (${dbType}):`, err.message);
+            throw err;
+        }
+    },
+    all: async (sql, params = []) => {
+        try {
+            if (dbType === 'mariadb') {
+                const [rows] = await pool.execute(sql, params);
+                return rows;
+            } else {
+                return new Promise((resolve, reject) => {
+                    sqliteDB.all(sql, params, (err, rows) => {
+                        if (err) reject(err);
+                        else resolve(rows);
+                    });
+                });
+            }
+        } catch (err) {
+            console.error(`❌ DB Error (${dbType}):`, err.message);
             throw err;
         }
     }
@@ -117,10 +158,13 @@ async function analyzeNewsNLP(title, summary) {
     });
 }
 
-// Inicialización de DB (MariaDB) con Blindaje Contra Colapsos
+// Inicialización de DB con Blindaje Contra Colapsos (MariaDB -> SQLite Fallback)
 async function initDB() {
-    console.log('⚙️ Sincronización MariaDB v6.0...');
+    console.log('⚙️ Sincronización MariaDB v6.2.4...');
     try {
+        // Intento de conexión MariaDB
+        await pool.execute('SELECT 1');
+        
         const schema = [
             `CREATE TABLE IF NOT EXISTS noticias (
                 id VARCHAR(50) PRIMARY KEY, 
@@ -177,6 +221,13 @@ async function initDB() {
                 user_agent TEXT, 
                 fecha DATETIME DEFAULT CURRENT_TIMESTAMP
             )`,
+            `CREATE TABLE IF NOT EXISTS registro_favoritos (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                noticia_id VARCHAR(50),
+                user_id INT,
+                fecha DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(noticia_id, user_id)
+            )`,
             `CREATE TABLE IF NOT EXISTS historial_extraccion (
                 id INT AUTO_INCREMENT PRIMARY KEY, 
                 nuevas INT, 
@@ -187,9 +238,28 @@ async function initDB() {
             )`
         ];
         for (const sql of schema) { await pool.execute(sql); }
-        console.log('✅ Tablas MariaDB sincronizadas.');
+        console.log('✅ Tablas MariaDB sincronizadas v6.2.4.');
     } catch (dbErr) {
-        console.error('⚠️ ALERTA: No se pudo conectar a MariaDB. Modo de visualización estática activado.', dbErr.message);
+        console.error('⚠️ ALERTA: MariaDB no disponible. Activando Respaldo SQLite.');
+        dbType = 'sqlite';
+        sqliteDB = new sqlite3.Database(path.join(__dirname, 'intlax.db'), (err) => {
+            if (err) console.error('❌ Error fatal: Tampoco se pudo cargar SQLite:', err.message);
+            else console.log('✅ Base de datos SQLite <span style="font-size:9px; color:#555; font-weight:700; letter-spacing:0.5px; opacity:0.6;">v6.2.4</span> y conectada.');
+        });
+        
+        // Sincronización básica de esquema SQLite (por si acaso)
+        const sqliteSchema = `
+            CREATE TABLE IF NOT EXISTS noticias (
+                id TEXT PRIMARY KEY, titulo TEXT, resumen TEXT, imageUrl TEXT, 
+                linkOriginal TEXT UNIQUE, fuente TEXT, fecha_publicacion TEXT, 
+                puntuacion INTEGER, vistas INTEGER DEFAULT 0, municipio TEXT, 
+                lat REAL, lng REAL, fecha_captura TEXT, slug TEXT, 
+                etiqueta_foro TEXT, autor TEXT, categoria_impacto TEXT DEFAULT 'GENERAL', 
+                municipio_tag TEXT DEFAULT 'OTRO', multiplicador_categoria REAL DEFAULT 1.0, 
+                votos_positivos_count INTEGER DEFAULT 0
+            );
+        `;
+        sqliteDB.exec(sqliteSchema);
     }
 }
 
@@ -255,7 +325,7 @@ async function fetchAllRssFeeds(force = false) {
                 const slug = generarSlug(title);
                 
                 try {
-                    const [res] = await pool.execute(`
+                    const res = await dbQuery.execute(`
                         INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, fecha_captura, slug, categoria_impacto, municipio_tag, multiplicador_categoria)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)
                         ON DUPLICATE KEY UPDATE 
@@ -273,7 +343,7 @@ async function fetchAllRssFeeds(force = false) {
         } catch (err) { erroresArr.push(feedData.source); }
     }
     const duration = Date.now() - startTime;
-    await pool.execute('INSERT INTO historial_extraccion (nuevas, actualizadas, errores, duracion_ms) VALUES (?, ?, ?, ?)', [nuevas, actualizadas, erroresArr.join(', '), duration]);
+    await dbQuery.execute('INSERT INTO historial_extraccion (nuevas, actualizadas, errores, duracion_ms) VALUES (?, ?, ?, ?)', [nuevas, actualizadas, erroresArr.join(', '), duration]);
 }
 
 cron.schedule('*/30 * * * *', () => fetchAllRssFeeds(true));
@@ -286,26 +356,49 @@ function formatearFront(row) {
     };
 }
 
-// ALGORITMO SEMÁNTICO-CUANTITATIVO (MariaDB)
+// ALGORITMO SEMÁNTICO-CUANTITATIVO (Híbrido)
 app.get('/api/v1/feed', async (req, res) => {
     try {
         const userMunicipio = req.query.municipio || 'OTRO';
-        const query = `
-            SELECT noticias.*, 
-            (
-                (vistas + 
-                (5 * LEAST((SELECT COUNT(*) FROM comentarios WHERE noticia_id = noticias.id), 20)) + 
-                (10 * votos_positivos_count)) *
-                multiplicador_categoria *
-                IF(municipio_tag = ?, 2.0, IF(municipio_tag != 'OTRO', 1.2, 0.5))
-            ) / 
-            POW((TIMESTAMPDIFF(HOUR, fecha_captura, NOW()) + 2), 1.8) as ranking_final
-            FROM noticias 
-            ORDER BY ranking_final DESC 
-            LIMIT 100
-        `;
-        const [rows] = await pool.execute(query, [userMunicipio]);
-        res.json({ noticiaPrincipal: rows[0] || null, noticiasSecundarias: rows.slice(1, 3), feed: rows.slice(3) });
+        let query = '';
+        
+        if (dbType === 'mariadb') {
+            query = `
+                SELECT noticias.*, 
+                (
+                    (vistas + 
+                    (5 * LEAST((SELECT COUNT(*) FROM comentarios WHERE noticia_id = noticias.id), 20)) + 
+                    (10 * votos_positivos_count)) *
+                    multiplicador_categoria *
+                    IF(municipio_tag = ?, 2.0, IF(municipio_tag != 'OTRO', 1.2, 0.5))
+                ) / 
+                POW((TIMESTAMPDIFF(HOUR, fecha_captura, NOW()) + 2), 1.8) as ranking_final
+                FROM noticias 
+                ORDER BY ranking_final DESC 
+                LIMIT 100
+            `;
+        } else {
+            // Versión SQLite optimizada
+            query = `
+                SELECT *, 
+                (
+                    (vistas + (10 * votos_positivos_count)) * 
+                    multiplicador_categoria * 
+                    CASE WHEN municipio_tag = ? THEN 2.0 ELSE 1.0 END
+                ) / 
+                ( ( (julianday('now') - julianday(fecha_captura)) * 24 ) + 2 ) as ranking_final
+                FROM noticias 
+                ORDER BY ranking_final DESC 
+                LIMIT 100
+            `;
+        }
+        
+        const rows = await dbQuery.all(query, [userMunicipio]);
+        res.json({ 
+            noticiaPrincipal: rows[0] || null, 
+            noticiasSecundarias: rows.slice(1, 4), 
+            feed: rows.slice(4) 
+        });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -314,13 +407,13 @@ app.get('/api/v1/noticias/:slug', async (req, res) => {
         const noticia = await dbQuery.get('SELECT * FROM noticias WHERE slug = ?', [req.params.slug]);
         if (!noticia) return res.status(404).json({ error: 'Noticia no encontrada' });
         
-        await pool.execute('UPDATE noticias SET vistas = vistas + 1 WHERE id = ?', [noticia.id]);
+        await dbQuery.execute('UPDATE noticias SET vistas = vistas + 1 WHERE id = ?', [noticia.id]);
         const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-        await pool.execute('INSERT INTO registro_vistas (noticia_id, ip_address, referer, user_agent) VALUES (?, ?, ?, ?)', [noticia.id, ip, req.headers.referer || '', req.headers['user-agent'] || '']);
+        await dbQuery.execute('INSERT INTO registro_vistas (noticia_id, ip_address, referer, user_agent) VALUES (?, ?, ?, ?)', [noticia.id, ip, req.headers.referer || '', req.headers['user-agent'] || '']);
         
-        const [val] = await pool.execute('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?', [noticia.id]);
-        const [comments] = await pool.execute('SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil FROM comentarios c LEFT JOIN usuarios u ON c.user_id = u.id WHERE noticia_id = ? ORDER BY fecha DESC', [noticia.id]);
-        res.json({ noticia: formatearFront(noticia), valoracion: val[0], comentarios: comments, user: req.user || null });
+        const val = await dbQuery.get('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?', [noticia.id]);
+        const comments = await dbQuery.all('SELECT c.*, u.nombre as usuario_nombre, u.foto_perfil FROM comentarios c LEFT JOIN usuarios u ON c.user_id = u.id WHERE noticia_id = ? ORDER BY fecha DESC', [noticia.id]);
+        res.json({ noticia: formatearFront(noticia), valoracion: val, comentarios: comments, user: req.user || null });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -328,9 +421,9 @@ app.post('/api/v1/valorar', async (req, res) => {
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     const { noticia_id, puntos } = req.body;
     try {
-        await pool.execute('INSERT INTO valoraciones (noticia_id, user_id, puntos, ip_address) VALUES (?, ?, ?, ?)', [noticia_id, req.user ? req.user.id : null, puntos, ip]);
+        await dbQuery.execute('INSERT INTO valoraciones (noticia_id, user_id, puntos, ip_address) VALUES (?, ?, ?, ?)', [noticia_id, req.user ? req.user.id : null, puntos, ip]);
         if (puntos >= 4) {
-            await pool.execute('UPDATE noticias SET votos_positivos_count = votos_positivos_count + 1 WHERE id = ?', [noticia_id]);
+            await dbQuery.execute('UPDATE noticias SET votos_positivos_count = votos_positivos_count + 1 WHERE id = ?', [noticia_id]);
         }
         res.json({ ok: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
