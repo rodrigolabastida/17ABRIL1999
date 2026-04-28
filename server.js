@@ -69,7 +69,11 @@ const PORT = process.env.PORT || 3000;
 // Inicialización de SQLite (Asíncrono para máxima compatibilidad)
 const db = new sqlite3.Database(path.join(__dirname, 'intlax.db'), (err) => {
     if (err) console.error('❌ Error al abrir base de datos:', err.message);
-    else console.log('✅ Base de datos SQLite conectada.');
+    else {
+        console.log('✅ Base de datos SQLite conectada.');
+        // Activar modo WAL para evitar bloqueos (v4.0.6)
+        db.run('PRAGMA journal_mode = WAL;');
+    }
 });
 
 // Helpers para Promesas
@@ -80,9 +84,10 @@ const dbQuery = {
     exec: (sql) => new Promise((res, rej) => db.exec(sql, (err) => { if (err) rej(err); else res(); }))
 };
 
-// Crear Tablas
+// Crear Tablas (Ahora se llama después del listen)
 async function initDB() {
     try {
+        console.log('📡 Sincronizando Tablas e Índices...');
         await dbQuery.exec(`
             CREATE TABLE IF NOT EXISTS usuarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -108,7 +113,9 @@ async function initDB() {
                 lat REAL,
                 lng REAL,
                 fecha_captura DATETIME,
-                slug TEXT
+                slug TEXT,
+                etiqueta_foro TEXT,
+                autor TEXT
             );
             CREATE TABLE IF NOT EXISTS comentarios (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -163,24 +170,21 @@ async function initDB() {
             CREATE INDEX IF NOT EXISTS idx_registro_vistas_nid ON registro_vistas(noticia_id);
         `);
         console.log('✅ Base de datos optimizada con índices de velocidad.');
-
-        // Migración simple para columnas nuevas
-        try {
-            await dbQuery.exec(`
-                ALTER TABLE comentarios ADD COLUMN ip_address TEXT;
-                ALTER TABLE valoraciones ADD COLUMN ip_address TEXT;
-                ALTER TABLE noticias ADD COLUMN etiqueta_foro TEXT;
-                ALTER TABLE noticias ADD COLUMN autor TEXT;
-            `);
-            console.log('✅ Columnas de IP, Etiqueta Foro y Autor añadidas.');
-        } catch (e) {
-            // Ignoramos si las columnas ya existen
+        
+        // Migraciones Seguras (Columna por columna para evitar fallos en bloque)
+        const columns = [
+            'ALTER TABLE noticias ADD COLUMN etiqueta_foro TEXT',
+            'ALTER TABLE noticias ADD COLUMN autor TEXT',
+            'ALTER TABLE comentarios ADD COLUMN ip_address TEXT',
+            'ALTER TABLE valoraciones ADD COLUMN ip_address TEXT'
+        ];
+        for (const sql of columns) {
+            try { await dbQuery.run(sql); } catch (e) { /* Columna ya existente */ }
         }
     } catch (err) {
         console.error('❌ Error al inicializar tablas:', err.message);
     }
 }
-initDB();
 
 // Passport Config (Opcional si faltan variables de entorno)
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
@@ -941,8 +945,14 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public/home.html')
 
 if (require.main === module) {
     app.listen(PORT, () => {
-        console.log(`🚀 Intlax ACTIVO en puerto ${PORT} - Iniciando con retardo de seguridad.`);
-        setTimeout(fetchAllRssFeeds, 30000); // 30 segundos de gracia para el arranque
+        console.log(`🚀 Intlax v4.0.6 ACTIVO en puerto ${PORT}`);
+        console.log('⚡ Iniciando motores secundarios...');
+        
+        // Ejecutar inicialización de DB sin bloquear el servidor
+        initDB().then(() => {
+            console.log('🤖 Centinela Digital listo. Esperando 1 min para primer barrido...');
+            setTimeout(fetchAllRssFeeds, 60000); 
+        });
     });
 }
 
