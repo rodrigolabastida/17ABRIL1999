@@ -381,15 +381,27 @@ async function fetchAllRssFeeds(force = false) {
                 if (autor && autor !== feedData.source) qPoints += 20;
                 if (etiqueta) qPoints += 20;
 
-                const res = await dbQuery.run(`
-                    INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura, slug, etiqueta_foro, autor)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(linkOriginal) DO UPDATE SET 
-                        puntuacion = excluded.puntuacion,
-                        etiqueta_foro = COALESCE(noticias.etiqueta_foro, excluded.etiqueta_foro),
-                        autor = COALESCE(noticias.autor, excluded.autor)
-                `, [Math.random().toString(36).substr(2, 9), item.title, summaryText, imageUrl, item.link, feedData.source, 
-                   item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(), score, 0, '', 19.31, -98.24, new Date().toISOString(), slug, etiqueta, autor]);
+                let res;
+                try {
+                    res = await dbQuery.run(`
+                        INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura, slug, etiqueta_foro, autor)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `, [Math.random().toString(36).substr(2, 9), item.title, summaryText, imageUrl, item.link, feedData.source, 
+                       item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(), score, 0, '', 19.31, -98.24, new Date().toISOString(), slug, etiqueta, autor]);
+                } catch (insertErr) {
+                    // Si el link ya existe, actualizamos puntuación y otros campos (v4.0.1 Fallback compatible)
+                    if (insertErr.message.includes('UNIQUE constraint failed')) {
+                        res = await dbQuery.run(`
+                            UPDATE noticias SET 
+                                puntuacion = ?,
+                                etiqueta_foro = COALESCE(etiqueta_foro, ?),
+                                autor = COALESCE(autor, ?)
+                            WHERE linkOriginal = ?
+                        `, [score, etiqueta, autor, item.link]);
+                    } else {
+                        throw insertErr; // Re-lanzar si es otro error
+                    }
+                }
                 
                 let status = 'Existente';
                 if (res.changes > 0) {
@@ -400,16 +412,8 @@ async function fetchAllRssFeeds(force = false) {
                         actualizadas++;
                     }
                 }
-
-                reporteCalidad.push({
-                    titulo: item.title,
-                    fuente: feedData.source,
-                    calidad: qPoints,
-                    status: status,
-                    detalles: { foto: !!imageUrl, texto: summaryText.length > 50, autor: autor !== feedData.source }
-                });
             } catch (itemErr) {
-                console.log(`❌ Error procesando item de ${feedData.source}`);
+                console.log(`❌ Error procesando item de ${feedData.source}:`, itemErr.message);
             }
         }
     }
@@ -936,9 +940,11 @@ app.get('/noticias/:slug', async (req, res) => {
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public/home.html')));
 
-app.listen(PORT, () => {
-    console.log(`🚀 Intlax ACTIVO en puerto ${PORT} - Iniciando con retardo de seguridad.`);
-    setTimeout(fetchAllRssFeeds, 30000); // 30 segundos de gracia para el arranque
-});
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`🚀 Intlax ACTIVO en puerto ${PORT} - Iniciando con retardo de seguridad.`);
+        setTimeout(fetchAllRssFeeds, 30000); // 30 segundos de gracia para el arranque
+    });
+}
 
 module.exports = { fetchAllRssFeeds };
