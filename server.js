@@ -117,75 +117,80 @@ async function analyzeNewsNLP(title, summary) {
     });
 }
 
-// Inicialización de DB (MariaDB)
+// Inicialización de DB (MariaDB) con Blindaje Contra Colapsos
 async function initDB() {
     console.log('⚙️ Sincronización MariaDB v6.0...');
-    const schema = [
-        `CREATE TABLE IF NOT EXISTS noticias (
-            id VARCHAR(50) PRIMARY KEY, 
-            titulo TEXT, 
-            resumen TEXT, 
-            imageUrl TEXT, 
-            linkOriginal VARCHAR(255) UNIQUE, 
-            fuente VARCHAR(100), 
-            fecha_publicacion DATETIME, 
-            puntuacion INT, 
-            vistas INT DEFAULT 0, 
-            municipio VARCHAR(100), 
-            lat DOUBLE, 
-            lng DOUBLE, 
-            fecha_captura DATETIME, 
-            slug VARCHAR(255), 
-            etiqueta_foro VARCHAR(100), 
-            autor VARCHAR(100),
-            categoria_impacto VARCHAR(50) DEFAULT 'GENERAL',
-            municipio_tag VARCHAR(100) DEFAULT 'OTRO',
-            multiplicador_categoria DECIMAL(3,2) DEFAULT 1.0,
-            votos_positivos_count INT DEFAULT 0
-        )`,
-        `CREATE TABLE IF NOT EXISTS usuarios (
-            id INT AUTO_INCREMENT PRIMARY KEY, 
-            google_id VARCHAR(255) UNIQUE, 
-            nombre VARCHAR(255), 
-            email VARCHAR(255), 
-            foto_perfil TEXT, 
-            puntos_reputacion INT DEFAULT 0, 
-            fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP, 
-            rol VARCHAR(50) DEFAULT 'user'
-        )`,
-        `CREATE TABLE IF NOT EXISTS comentarios (
-            id INT AUTO_INCREMENT PRIMARY KEY, 
-            noticia_id VARCHAR(50), 
-            user_id INT NULL, 
-            comentario TEXT, 
-            ip_address VARCHAR(50), 
-            fecha DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`,
-        `CREATE TABLE IF NOT EXISTS valoraciones (
-            id INT AUTO_INCREMENT PRIMARY KEY, 
-            noticia_id VARCHAR(50), 
-            user_id INT NULL, 
-            puntos INT, 
-            ip_address VARCHAR(50)
-        )`,
-        `CREATE TABLE IF NOT EXISTS registro_vistas (
-            id INT AUTO_INCREMENT PRIMARY KEY, 
-            noticia_id VARCHAR(50), 
-            ip_address VARCHAR(50), 
-            referer TEXT, 
-            user_agent TEXT, 
-            fecha DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`,
-        `CREATE TABLE IF NOT EXISTS historial_extraccion (
-            id INT AUTO_INCREMENT PRIMARY KEY, 
-            nuevas INT, 
-            actualizadas INT, 
-            errores TEXT, 
-            duracion_ms INT, 
-            fecha DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`
-    ];
-    for (const sql of schema) { await pool.execute(sql); }
+    try {
+        const schema = [
+            `CREATE TABLE IF NOT EXISTS noticias (
+                id VARCHAR(50) PRIMARY KEY, 
+                titulo TEXT, 
+                resumen TEXT, 
+                imageUrl TEXT, 
+                linkOriginal VARCHAR(255) UNIQUE, 
+                fuente VARCHAR(100), 
+                fecha_publicacion DATETIME, 
+                puntuacion INT, 
+                vistas INT DEFAULT 0, 
+                municipio VARCHAR(100), 
+                lat DOUBLE, 
+                lng DOUBLE, 
+                fecha_captura DATETIME, 
+                slug VARCHAR(255), 
+                etiqueta_foro VARCHAR(100), 
+                autor VARCHAR(100),
+                categoria_impacto VARCHAR(50) DEFAULT 'GENERAL',
+                municipio_tag VARCHAR(100) DEFAULT 'OTRO',
+                multiplicador_categoria DECIMAL(3,2) DEFAULT 1.0,
+                votos_positivos_count INT DEFAULT 0
+            )`,
+            `CREATE TABLE IF NOT EXISTS usuarios (
+                id INT AUTO_INCREMENT PRIMARY KEY, 
+                google_id VARCHAR(255) UNIQUE, 
+                nombre VARCHAR(255), 
+                email VARCHAR(255), 
+                foto_perfil TEXT, 
+                puntos_reputacion INT DEFAULT 0, 
+                fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP, 
+                rol VARCHAR(50) DEFAULT 'user'
+            )`,
+            `CREATE TABLE IF NOT EXISTS comentarios (
+                id INT AUTO_INCREMENT PRIMARY KEY, 
+                noticia_id VARCHAR(50), 
+                user_id INT NULL, 
+                comentario TEXT, 
+                ip_address VARCHAR(50), 
+                fecha DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS valoraciones (
+                id INT AUTO_INCREMENT PRIMARY KEY, 
+                noticia_id VARCHAR(50), 
+                user_id INT NULL, 
+                puntos INT, 
+                ip_address VARCHAR(50)
+            )`,
+            `CREATE TABLE IF NOT EXISTS registro_vistas (
+                id INT AUTO_INCREMENT PRIMARY KEY, 
+                noticia_id VARCHAR(50), 
+                ip_address VARCHAR(50), 
+                referer TEXT, 
+                user_agent TEXT, 
+                fecha DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE TABLE IF NOT EXISTS historial_extraccion (
+                id INT AUTO_INCREMENT PRIMARY KEY, 
+                nuevas INT, 
+                actualizadas INT, 
+                errores TEXT, 
+                duracion_ms INT, 
+                fecha DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`
+        ];
+        for (const sql of schema) { await pool.execute(sql); }
+        console.log('✅ Tablas MariaDB sincronizadas.');
+    } catch (dbErr) {
+        console.error('⚠️ ALERTA: No se pudo conectar a MariaDB. Modo de visualización estática activado.', dbErr.message);
+    }
 }
 
 // Passport MariaDB
