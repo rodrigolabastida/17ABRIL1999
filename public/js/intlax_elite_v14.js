@@ -370,11 +370,16 @@ async function fetchNews(params = '') {
         if (!response.ok) throw new Error('Error en el servidor');
         const data = await response.json();
         
-        globalArticles = [data.noticiaPrincipal, ...data.noticiasSecundarias];
+        const noticiasRaw = data.noticiasSecundarias || [];
+        const principal = data.noticiaPrincipal || noticiasRaw[0];
+        const secundarias = data.noticiaPrincipal ? noticiasRaw : noticiasRaw.slice(1);
         
-        // Tomamos la principal y las primeras 2 secundarias para el carrusel
-        const heroArticles = [data.noticiaPrincipal, ...data.noticiasSecundarias.slice(0, 2)];
-        const feedArticles = data.noticiasSecundarias.slice(2);
+        globalArticles = principal ? [principal, ...secundarias] : secundarias;
+        
+        // Carrusel: Principal + 2 primeras disponibles
+        const heroArticles = principal ? [principal, ...secundarias.slice(0, 2)] : secundarias.slice(0, 3);
+        // Feed: El resto
+        const feedArticles = principal ? secundarias.slice(2) : secundarias.slice(3);
 
         renderHeroCarousel(heroArticles);
         renderFeed(feedArticles);
