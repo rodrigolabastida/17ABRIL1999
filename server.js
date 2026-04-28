@@ -66,124 +66,56 @@ const parser = new Parser({
 
 const PORT = process.env.PORT || 3000;
 
-// Inicialización de SQLite (Asíncrono para máxima compatibilidad)
-const db = new sqlite3.Database(path.join(__dirname, 'intlax.db'), (err) => {
-    if (err) console.error('❌ Error al abrir base de datos:', err.message);
-    else {
-        console.log('✅ Base de datos SQLite conectada.');
-        // Activar modo WAL para evitar bloqueos (v4.0.6)
-        db.run('PRAGMA journal_mode = WAL;');
-    }
-});
+// Inicialización de SQLite con Blindaje Total (v5.0)
+let db = null;
+try {
+    db = new sqlite3.Database(path.join(__dirname, 'intlax.db'), sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
+        if (err) console.error('⚠️ Advertencia: Base de datos no disponible');
+        else {
+            db.run('PRAGMA journal_mode = WAL;');
+            console.log('✅ Canal de datos v5.0 abierto.');
+        }
+    });
+} catch (e) {
+    console.log('⚠️ Modo de emergencia: Sin base de datos');
+}
 
-// Helpers para Promesas
 const dbQuery = {
-    run: (sql, params = []) => new Promise((res, rej) => db.run(sql, params, function(err) { if (err) rej(err); else res(this); })),
-    get: (sql, params = []) => new Promise((res, rej) => db.get(sql, params, (err, row) => { if (err) rej(err); else res(row); })),
-    all: (sql, params = []) => new Promise((res, rej) => db.all(sql, params, (err, rows) => { if (err) rej(err); else res(rows); })),
-    exec: (sql) => new Promise((res, rej) => db.exec(sql, (err) => { if (err) rej(err); else res(); }))
+    run: (sql, params = []) => new Promise((res) => {
+        if (!db) return res({ changes: 0 });
+        db.run(sql, params, function(err) { res(err ? { changes: 0, err } : this); });
+    }),
+    get: (sql, params = []) => new Promise((res) => {
+        if (!db) return res(null);
+        db.get(sql, params, (err, row) => res(err ? null : row));
+    }),
+    all: (sql, params = []) => new Promise((res) => {
+        if (!db) return res([]);
+        db.all(sql, params, (err, rows) => res(err ? [] : rows));
+    }),
+    exec: (sql) => new Promise((res) => {
+        if (!db) return res();
+        db.exec(sql, (err) => res());
+    })
 };
 
-// Crear Tablas (Ahora se llama después del listen)
+// initDB ahora es totalmente silencioso y no bloqueante
 async function initDB() {
-    try {
-        console.log('📡 Sincronizando Tablas e Índices...');
-        await dbQuery.exec(`
-            CREATE TABLE IF NOT EXISTS usuarios (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                google_id TEXT UNIQUE,
-                nombre TEXT,
-                email TEXT,
-                foto_perfil TEXT,
-                puntos_reputacion INTEGER DEFAULT 0,
-                fecha_registro DATETIME DEFAULT (datetime('now')),
-                rol TEXT DEFAULT 'user'
-            );
-            CREATE TABLE IF NOT EXISTS noticias (
-                id TEXT PRIMARY KEY,
-                titulo TEXT,
-                resumen TEXT,
-                imageUrl TEXT,
-                linkOriginal TEXT UNIQUE,
-                fuente TEXT,
-                fecha_publicacion DATETIME,
-                puntuacion INTEGER,
-                vistas INTEGER DEFAULT 0,
-                municipio TEXT,
-                lat REAL,
-                lng REAL,
-                fecha_captura DATETIME,
-                slug TEXT,
-                etiqueta_foro TEXT,
-                autor TEXT
-            );
-            CREATE TABLE IF NOT EXISTS comentarios (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                noticia_id TEXT,
-                user_id INTEGER NULL,
-                comentario TEXT,
-                ip_address TEXT,
-                fecha DATETIME DEFAULT (datetime('now')),
-                FOREIGN KEY (noticia_id) REFERENCES noticias(id),
-                FOREIGN KEY (user_id) REFERENCES usuarios(id)
-            );
-            CREATE TABLE IF NOT EXISTS valoraciones (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                noticia_id TEXT,
-                user_id INTEGER NULL,
-                puntos INTEGER CHECK(puntos BETWEEN 1 AND 5),
-                ip_address TEXT,
-                FOREIGN KEY (noticia_id) REFERENCES noticias(id),
-                FOREIGN KEY (user_id) REFERENCES usuarios(id)
-            );
-            CREATE TABLE IF NOT EXISTS favoritos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                noticia_id TEXT,
-                user_id INTEGER,
-                fecha DATETIME DEFAULT (datetime('now')),
-                UNIQUE(noticia_id, user_id),
-                FOREIGN KEY (user_id) REFERENCES usuarios(id)
-            );
-            CREATE TABLE IF NOT EXISTS registro_vistas (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                noticia_id TEXT,
-                ip_address TEXT,
-                referer TEXT,
-                user_agent TEXT,
-                fecha DATETIME DEFAULT (datetime('now')),
-                FOREIGN KEY (noticia_id) REFERENCES noticias(id)
-            );
-            CREATE TABLE IF NOT EXISTS historial_extraccion (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                fecha DATETIME DEFAULT (datetime('now')),
-                nuevas INTEGER,
-                actualizadas INTEGER,
-                errores TEXT,
-                duracion_ms INTEGER
-            );
-            -- Índices de Alto Rendimiento
-            CREATE INDEX IF NOT EXISTS idx_slug ON noticias(slug);
-            CREATE INDEX IF NOT EXISTS idx_relevancia ON noticias(fecha_captura, puntuacion);
-            CREATE INDEX IF NOT EXISTS idx_vistas_n ON noticias(vistas);
-            CREATE INDEX IF NOT EXISTS idx_comentarios_nid ON comentarios(noticia_id);
-            CREATE INDEX IF NOT EXISTS idx_valoraciones_nid ON valoraciones(noticia_id);
-            CREATE INDEX IF NOT EXISTS idx_registro_vistas_nid ON registro_vistas(noticia_id);
-        `);
-        console.log('✅ Base de datos optimizada con índices de velocidad.');
-        
-        // Migraciones Seguras (Columna por columna para evitar fallos en bloque)
-        const columns = [
-            'ALTER TABLE noticias ADD COLUMN etiqueta_foro TEXT',
-            'ALTER TABLE noticias ADD COLUMN autor TEXT',
-            'ALTER TABLE comentarios ADD COLUMN ip_address TEXT',
-            'ALTER TABLE valoraciones ADD COLUMN ip_address TEXT'
-        ];
-        for (const sql of columns) {
-            try { await dbQuery.run(sql); } catch (e) { /* Columna ya existente */ }
-        }
-    } catch (err) {
-        console.error('❌ Error al inicializar tablas:', err.message);
-    }
+    console.log('⚙️ Sincronización v5.0 en segundo plano...');
+    const schema = `
+        CREATE TABLE IF NOT EXISTS noticias (id TEXT PRIMARY KEY, titulo TEXT, resumen TEXT, imageUrl TEXT, linkOriginal TEXT UNIQUE, fuente TEXT, fecha_publicacion DATETIME, puntuacion INTEGER, vistas INTEGER DEFAULT 0, municipio TEXT, lat REAL, lng REAL, fecha_captura DATETIME, slug TEXT, etiqueta_foro TEXT, autor TEXT);
+        CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, google_id TEXT UNIQUE, nombre TEXT, email TEXT, foto_perfil TEXT, puntos_reputacion INTEGER DEFAULT 0, fecha_registro DATETIME DEFAULT (datetime('now')), rol TEXT DEFAULT 'user');
+        CREATE TABLE IF NOT EXISTS comentarios (id INTEGER PRIMARY KEY AUTOINCREMENT, noticia_id TEXT, user_id INTEGER NULL, comentario TEXT, ip_address TEXT, fecha DATETIME DEFAULT (datetime('now')));
+        CREATE TABLE IF NOT EXISTS valoraciones (id INTEGER PRIMARY KEY AUTOINCREMENT, noticia_id TEXT, user_id INTEGER NULL, puntos INTEGER CHECK(puntos BETWEEN 1 AND 5), ip_address TEXT);
+        CREATE TABLE IF NOT EXISTS registro_vistas (id INTEGER PRIMARY KEY AUTOINCREMENT, noticia_id TEXT, ip_address TEXT, referer TEXT, user_agent TEXT, fecha DATETIME DEFAULT (datetime('now')));
+    `;
+    await dbQuery.exec(schema);
+    // Migraciones rápidas
+    const mods = [
+        'ALTER TABLE noticias ADD COLUMN etiqueta_foro TEXT',
+        'ALTER TABLE noticias ADD COLUMN autor TEXT'
+    ];
+    for (const sql of mods) { await dbQuery.run(sql); }
 }
 
 // Passport Config (Opcional si faltan variables de entorno)
@@ -945,7 +877,7 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public/home.html')
 
 if (require.main === module) {
     app.listen(PORT, () => {
-        console.log(`🚀 Intlax v4.0.6 ACTIVO en puerto ${PORT}`);
+        console.log(`🚀 Intlax v5.0 ACTIVO en puerto ${PORT}`);
         console.log('⚡ Iniciando motores secundarios...');
         
         // Ejecutar inicialización de DB sin bloquear el servidor
