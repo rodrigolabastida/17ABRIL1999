@@ -157,7 +157,10 @@ async function initDB() {
             -- Índices de Alto Rendimiento
             CREATE INDEX IF NOT EXISTS idx_slug ON noticias(slug);
             CREATE INDEX IF NOT EXISTS idx_relevancia ON noticias(fecha_captura, puntuacion);
-            CREATE INDEX IF NOT EXISTS idx_vistas ON noticias(vistas);
+            CREATE INDEX IF NOT EXISTS idx_vistas_n ON noticias(vistas);
+            CREATE INDEX IF NOT EXISTS idx_comentarios_nid ON comentarios(noticia_id);
+            CREATE INDEX IF NOT EXISTS idx_valoraciones_nid ON valoraciones(noticia_id);
+            CREATE INDEX IF NOT EXISTS idx_registro_vistas_nid ON registro_vistas(noticia_id);
         `);
         console.log('✅ Base de datos optimizada con índices de velocidad.');
 
@@ -460,24 +463,20 @@ let lastCacheTime = 0;
 app.get('/api/v1/feed', async (req, res) => {
     try {
         const ahora = Date.now();
-        if (cacheFeed && (ahora - lastCacheTime < 300000)) {
+        if (cacheFeed && (ahora - lastCacheTime < 600000)) {
             return res.json(cacheFeed);
         }
 
-        // Algoritmo de Relevancia "Frontera" (v3.5.1): Inmediatez Extrema + Bono de Frescura
+        // Algoritmo Ultra-Ligero 4.0.4: Máxima compatibilidad y velocidad
         const rows = await dbQuery.all(`
             SELECT n.*, 
             (
-                ( (n.puntuacion * 2.0) + (SELECT COUNT(*) FROM registro_vistas WHERE noticia_id = n.id) * 15 + COUNT(DISTINCT c.id) * 60 + COALESCE(AVG(v.puntos), 0) * 40) 
-                * (CASE WHEN n.imageUrl LIKE '%placeholder%' THEN 0.01 ELSE 1.0 END)
-                + (CASE WHEN (julianday('now') - julianday(n.fecha_captura)) * 24 < 3 THEN 500 ELSE 0 END) -- Bono Frescura 3h
-            ) / POWER( (julianday('now') - julianday(n.fecha_captura)) * 24 + 1, 2.5) as score
+                (n.puntuacion * 2.0) + (n.vistas * 0.5) 
+                + (CASE WHEN (julianday('now') - julianday(n.fecha_captura)) * 24 < 3 THEN 500 ELSE 0 END)
+            ) / POWER( (julianday('now') - julianday(n.fecha_captura)) * 24 + 1, 1.5) as score
             FROM noticias n
-            LEFT JOIN comentarios c ON n.id = c.noticia_id
-            LEFT JOIN valoraciones v ON n.id = v.noticia_id
-            GROUP BY n.id
             ORDER BY score DESC 
-            LIMIT 60
+            LIMIT 40
         `);
         
         if (!rows.length) return res.json({ noticiaPrincipal: null, noticiasSecundarias: [] });
