@@ -64,7 +64,7 @@ const parser = new Parser({
     }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000; // Hostinger asignará el puerto dinámicamente o usará 3000 por defecto
 
 // Inicialización de SQLite con Blindaje Total (v5.0)
 let db = null;
