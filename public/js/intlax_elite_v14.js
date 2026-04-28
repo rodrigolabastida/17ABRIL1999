@@ -169,7 +169,7 @@ function renderArticleDetail(noticia) {
                 <button onclick="openInAppBrowser('${noticia.link}')" class="btn-primary" style="width:100%; display:block; text-align:center; border:none; margin-bottom:15px; padding:18px; font-size:17px; border-radius:15px; box-shadow:0 10px 30px rgba(255,204,0,0.2); color:#000; font-weight:800; cursor:pointer;">VER NOTA COMPLETA</button>
                 
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:40px;">
-                    <button onclick="shareArticle('${noticia.title.replace(/'/g, "\\'")}', window.location.origin + '/noticias/${noticia.slug}')" class="btn-secondary" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:15px; border-radius:12px; font-size:15px; font-weight:700;">
+                    <button onclick="shareArticle('${(noticia.title || '').replace(/'/g, "\\\\'")}', window.location.origin + '/noticias/${noticia.slug}')" class="btn-secondary" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:15px; border-radius:12px; font-size:15px; font-weight:700;">
                         <i class='bx bx-share-alt'></i> Compartir
                     </button>
                     <button id="save-btn-${noticia.id}" onclick="toggleFavorite('${noticia.id}')" class="btn-secondary" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:15px; border-radius:12px; font-size:15px; font-weight:700;">
@@ -445,7 +445,7 @@ function renderFeed(noticias) {
                                 <span>${(noticia.views/1000).toFixed(1)}K lecturas</span>
                             </div>
                             <div class="news-actions">
-                                <i class='bx bx-share-alt' onclick="event.preventDefault(); shareArticle('${noticia.title.replace(/'/g, "\\'")}', window.location.origin + '/noticias/${noticia.slug}')"></i>
+                                <i class='bx bx-share-alt' onclick="event.preventDefault(); shareArticle('${(noticia.title || '').replace(/'/g, "\\\\'")}', window.location.origin + '/noticias/${noticia.slug}')"></i>
                             </div>
                         </div>
                     </div>
