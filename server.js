@@ -422,6 +422,18 @@ async function fetchAllRssFeeds(force = false) {
                     imageUrl = '/img/placeholder-noticia.jpg';
                 }
 
+                // Identificación de la Fuente Real (Especial para Google News)
+                let source = feedData.source;
+                if (feedData.source === 'Google News') {
+                    // rss-parser suele poner el nombre del medio en item.source o al final del título
+                    if (item.source) {
+                        source = (typeof item.source === 'object') ? (item.source._ || item.source.name || source) : item.source;
+                    } else if (title.includes(' - ')) {
+                        const parts = title.split(' - ');
+                        source = parts[parts.length - 1].trim();
+                    }
+                }
+
                 const slug = generarSlug(title);
                 const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
                 
@@ -431,10 +443,11 @@ async function fetchAllRssFeeds(force = false) {
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON DUPLICATE KEY UPDATE 
                             imageUrl = VALUES(imageUrl),
+                            fuente = VALUES(fuente),
                             puntuacion = VALUES(puntuacion),
                             categoria_impacto = VALUES(categoria_impacto),
                             multiplicador_categoria = VALUES(multiplicador_categoria)
-                    `, [Math.random().toString(36).substr(2, 9), title, summaryText, imageUrl, item.link, feedData.source, 
+                    `, [Math.random().toString(36).substr(2, 9), title, summaryText, imageUrl, item.link, source, 
                        item.pubDate ? new Date(item.pubDate).toISOString().slice(0, 19).replace('T', ' ') : now, 
                        50, now, slug, nlp.categoria, nlp.municipio, nlp.multiplicador]);
                     
@@ -471,6 +484,10 @@ function formatearFront(row) {
 
 // ALGORITMO SEMÁNTICO-CUANTITATIVO (Híbrido)
 app.get('/api/v1/feed', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
     try {
         const userMunicipio = req.query.municipio || 'OTRO';
         let query = '';
@@ -535,12 +552,12 @@ app.get('/api/v1/debug', async (req, res) => {
     try {
         const rowCount = await dbQuery.get('SELECT COUNT(*) as total FROM noticias');
         const realImageCount = await dbQuery.get("SELECT COUNT(*) as total FROM noticias WHERE imageUrl NOT LIKE '%placeholder%'");
-        const lastNews = await dbQuery.get('SELECT * FROM noticias ORDER BY fecha_captura DESC LIMIT 1');
+        const last10News = await dbQuery.all('SELECT titulo, fuente, imageUrl, fecha_captura FROM noticias ORDER BY fecha_captura DESC LIMIT 10');
         res.json({
             dbType,
             rowCount: rowCount.total,
             realImageCount: realImageCount.total,
-            lastNews,
+            last10News,
             env: {
                 DB_HOST: process.env.DB_HOST,
                 NODE_ENV: process.env.NODE_ENV
