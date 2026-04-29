@@ -643,7 +643,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public/home.html')));
 
 app.listen(PORT, async () => {
-    console.log(`🚀 Intlax MariaDB v6.3.0 ACTIVO en puerto ${PORT}`);
+    console.log(`🚀 Intlax MariaDB v6.3.1 ACTIVO en puerto ${PORT}`);
     await initDB();
     setTimeout(fetchAllRssFeeds, 5000);
 });
