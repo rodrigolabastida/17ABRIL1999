@@ -30,8 +30,30 @@ const FEED_URLS = [
     { url: 'https://revistacodigo24.com/feed/', source: 'Código 24' }
 ];
 
+async function extractImageFromUrl(url) {
+    if (!url || !url.startsWith('http')) return null;
+    try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        const html = await response.text();
+        const $ = cheerio.load(html);
+        let img = $('meta[property="og:image"]').attr('content') || 
+                  $('meta[name="twitter:image"]').attr('content');
+        if (!img) img = $('.wp-post-image').attr('src') || $('.attachment-post-thumbnail').attr('src');
+        if (!img) {
+            $('article img, .content img, .post-content img').each((i, el) => {
+                const src = $(el).attr('src');
+                if (src && src.startsWith('http') && !src.includes('logo') && !src.includes('avatar')) {
+                    img = src;
+                    return false; 
+                }
+            });
+        }
+        return img;
+    } catch (e) { return null; }
+}
+
 async function run() {
-    console.log('🔄 Iniciando Extractor MariaDB v6.0...');
+    console.log('🔄 Iniciando Extractor MariaDB v6.2.9 (Deep Image Hunter v5)...');
     
     let connection;
     try {
@@ -56,13 +78,12 @@ async function run() {
             const feed = await parser.parseURL(feedData.url);
             console.log(`OK (${feed.items.length} notas)`);
             
-            for (const item of feed.items.slice(0, 20)) {
+            for (const item of feed.items.slice(0, 10)) {
                 total++;
                 const slug = item.title.toLowerCase()
                             .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
                             .replace(/ /g, '-').replace(/[^\w-]+/g, '');
 
-                // Lógica de Extracción de Imagen Robusta (Image Hunter v3)
                 let img = '/img/placeholder-noticia.jpg';
                 if (item.enclosure && item.enclosure.url) img = item.enclosure.url;
                 else if (item.mediaContent && item.mediaContent.$ && item.mediaContent.$.url) img = item.mediaContent.$.url;
@@ -76,6 +97,12 @@ async function run() {
                     }
                 }
                 
+                // DEEP SCAN
+                if (img.includes('placeholder')) {
+                    const deepImg = await extractImageFromUrl(item.link);
+                    if (deepImg) img = deepImg;
+                }
+
                 if (feedData.source === 'Google News' && img.includes('placeholder')) {
                      const matchSnippet = (item.content || '').match(/src="([^">]+)"/);
                      if (matchSnippet) img = matchSnippet[1];

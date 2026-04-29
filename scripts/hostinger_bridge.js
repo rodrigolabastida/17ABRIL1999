@@ -108,8 +108,16 @@ if (require.main === module) {
                     });
                     console.log(JSON.stringify(deployments, null, 2));
                     break;
+                case 'show-logs':
+                    const buildUuid = arg1 || 'latest'; // Intentamos pasar el argumento
+                    const logs = await callMCP('hosting_showJsDeploymentLogs', {
+                        domain: TARGET_DOMAIN,
+                        buildUuid: buildUuid === 'latest' ? undefined : buildUuid 
+                    });
+                    console.log(JSON.stringify(logs, null, 2));
+                    break;
                 default:
-                    console.log('Comandos disponibles: list-websites, get-websites-info, deploy <zip>, list-deployments');
+                    console.log('Comandos disponibles: list-websites, get-websites-info, deploy <zip>, list-deployments, show-logs');
             }
         } catch (err) {
             console.error('❌ Error:', err.message);

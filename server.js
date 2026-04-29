@@ -313,12 +313,43 @@ const FEED_URLS = [
     { url: 'https://faronoticias.com.mx/feed/', source: 'Faro Noticias' }
 ];
 
+async function extractImageFromUrl(url) {
+    if (!url || !url.startsWith('http')) return null;
+    try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        const html = await response.text();
+        const $ = cheerio.load(html);
+        
+        // Prioridad 1: OpenGraph
+        let img = $('meta[property="og:image"]').attr('content') || 
+                  $('meta[name="twitter:image"]').attr('content');
+        
+        // Prioridad 2: Featured Image (WordPress común)
+        if (!img) img = $('.wp-post-image').attr('src') || $('.attachment-post-thumbnail').attr('src');
+        
+        // Prioridad 3: Primera imagen grande en el cuerpo
+        if (!img) {
+            $('article img, .content img, .post-content img').each((i, el) => {
+                const src = $(el).attr('src');
+                if (src && src.startsWith('http') && !src.includes('logo') && !src.includes('avatar')) {
+                    img = src;
+                    return false; 
+                }
+            });
+        }
+        
+        return img;
+    } catch (e) {
+        return null;
+    }
+}
+
 async function fetchAllRssFeeds(force = false) {
     const startTime = Date.now();
     let nuevas = 0, actualizadas = 0;
     let erroresArr = [];
 
-    console.log('🔄 Iniciando sincronización de feeds robusta v6.2.8...');
+    console.log('🔄 Iniciando sincronización de feeds robusta v6.2.9 (Deep Image Hunter v5)...');
 
     for (const feedData of FEED_URLS) {
         try {
@@ -330,7 +361,7 @@ async function fetchAllRssFeeds(force = false) {
                 // Semantización NLP
                 const nlp = await analyzeNewsNLP(title, summaryText);
                 
-                // Extracción de Imagen Robusta (Image Hunter v3 - Cheerio Edition)
+                // Extracción de Imagen Robusta
                 let imageUrl = '/img/placeholder-noticia.jpg';
                 
                 if (item.enclosure && item.enclosure.url) {
@@ -340,18 +371,21 @@ async function fetchAllRssFeeds(force = false) {
                 } else if (item.mediaThumbnail && item.mediaThumbnail.$ && item.mediaThumbnail.$.url) {
                     imageUrl = item.mediaThumbnail.$.url;
                 } else {
-                    // Buscar en campos HTML (contentEncoded, description, content)
                     const htmlContent = (item.contentEncoded || '') + (item.description || '') + (item.content || '');
                     if (htmlContent.includes('<img')) {
                         const $ = cheerio.load(htmlContent);
                         const foundImg = $('img').attr('src');
-                        if (foundImg && foundImg.startsWith('http')) {
-                            imageUrl = foundImg;
-                        }
+                        if (foundImg && foundImg.startsWith('http')) imageUrl = foundImg;
                     }
                 }
 
-                // Limpieza específica para Google News si sigue fallando
+                // DEEP SCAN: Si seguimos sin imagen, vamos a la fuente original
+                if (imageUrl.includes('placeholder')) {
+                    const deepImg = await extractImageFromUrl(item.link);
+                    if (deepImg) imageUrl = deepImg;
+                }
+
+                // Limpieza específica para Google News
                 if (feedData.source === 'Google News' && imageUrl.includes('placeholder')) {
                      const match = (item.content || '').match(/src="([^">]+)"/);
                      if (match) imageUrl = match[1];
@@ -464,6 +498,26 @@ app.post('/api/v1/valorar', async (req, res) => {
         }
         res.json({ ok: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/v1/debug', async (req, res) => {
+    try {
+        const rowCount = await dbQuery.get('SELECT COUNT(*) as total FROM noticias');
+        const realImageCount = await dbQuery.get("SELECT COUNT(*) as total FROM noticias WHERE imageUrl NOT LIKE '%placeholder%'");
+        const lastNews = await dbQuery.get('SELECT * FROM noticias ORDER BY fecha_captura DESC LIMIT 1');
+        res.json({
+            dbType,
+            rowCount: rowCount.total,
+            realImageCount: realImageCount.total,
+            lastNews,
+            env: {
+                DB_HOST: process.env.DB_HOST,
+                NODE_ENV: process.env.NODE_ENV
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 app.get('/api/v1/user-status', (req, res) => {
