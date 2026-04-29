@@ -320,22 +320,37 @@ async function extractImageFromUrl(url) {
         const html = await response.text();
         const $ = cheerio.load(html);
         
-        // Prioridad 1: OpenGraph
+        // Prioridad 1: OpenGraph y Twitter
         let img = $('meta[property="og:image"]').attr('content') || 
-                  $('meta[name="twitter:image"]').attr('content');
+                  $('meta[property="og:image:secure_url"]').attr('content') ||
+                  $('meta[name="twitter:image"]').attr('content') ||
+                  $('link[rel="image_src"]').attr('href');
         
-        // Prioridad 2: Featured Image (WordPress común)
-        if (!img) img = $('.wp-post-image').attr('src') || $('.attachment-post-thumbnail').attr('src');
+        // Prioridad 2: Featured Image (WordPress y otros)
+        if (!img) img = $('.wp-post-image').attr('src') || 
+                        $('.attachment-post-thumbnail').attr('src') ||
+                        $('.entry-thumb img').attr('src') ||
+                        $('.post-thumbnail img').attr('src');
+
+        // Prioridad 3: Específico para El Sol de Tlaxcala / OEM
+        if (!img) img = $('figure img').attr('src');
         
-        // Prioridad 3: Primera imagen grande en el cuerpo
+        // Prioridad 4: Primera imagen grande en el cuerpo
         if (!img) {
-            $('article img, .content img, .post-content img').each((i, el) => {
-                const src = $(el).attr('src');
-                if (src && src.startsWith('http') && !src.includes('logo') && !src.includes('avatar')) {
+            $('article img, .content img, .post-content img, .td-post-content img').each((i, el) => {
+                const src = $(el).attr('src') || $(el).attr('data-src');
+                if (src && src.startsWith('http') && !src.includes('logo') && !src.includes('avatar') && !src.includes('pixel')) {
                     img = src;
                     return false; 
                 }
             });
+        }
+        
+        // Limpieza de URLs relativas
+        if (img && img.startsWith('//')) img = 'https:' + img;
+        if (img && !img.startsWith('http')) {
+            const urlObj = new URL(url);
+            img = urlObj.origin + (img.startsWith('/') ? '' : '/') + img;
         }
         
         return img;
@@ -456,11 +471,11 @@ app.get('/api/v1/feed', async (req, res) => {
                 ) / 
                 POW((TIMESTAMPDIFF(HOUR, fecha_captura, NOW()) + 2), 1.8) as ranking_final
                 FROM noticias 
-                ORDER BY ranking_final DESC 
+                ORDER BY (imageUrl NOT LIKE '%placeholder%') DESC, ranking_final DESC 
                 LIMIT 100
             `;
         } else {
-            query = `SELECT *, 1.0 as ranking_final FROM noticias ORDER BY fecha_captura DESC LIMIT 100`;
+            query = `SELECT *, (imageUrl NOT LIKE '%placeholder%') as has_img FROM noticias ORDER BY has_img DESC, fecha_captura DESC LIMIT 100`;
         }
         
         const rows = await dbQuery.all(query, [userMunicipio]);
