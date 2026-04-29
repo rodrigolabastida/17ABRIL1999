@@ -500,6 +500,8 @@ function setupBottomNav() {
         } else if (viewId === 'search') {
             searchView.classList.remove('hidden');
             searchBtn.classList.add('active');
+            // Cargar municipios si no están cargados
+            renderMunicipalities();
             // Si no hay búsqueda, mostramos los municipios
             const input = document.getElementById('input-busqueda');
             if(input && input.value.length === 0) {
@@ -944,24 +946,34 @@ window.retryGeoSearch = () => {
 async function renderMunicipalities() {
     const container = document.getElementById('lista-municipios');
     if (!container) return;
+    
+    // Si ya hay contenido (más de lo que dice "Cargando"), no volver a cargar innecesariamente
+    if (container.children.length > 1 && !container.querySelector('.loading-municipios')) return;
 
     try {
+        console.log('🗺️ Cargando lista de municipios...');
         const res = await fetch('/api/v1/municipalities');
         const municipalities = await res.json();
         
+        if (!municipalities || municipalities.length === 0) {
+            container.innerHTML = '<p style="color:#666; padding:20px; text-align:center;">No hay municipios disponibles.</p>';
+            return;
+        }
+
         let html = '';
         municipalities.forEach(m => {
             html += `
                 <a href="/municipio/${m.name.toLowerCase()}" class="municipio-card" onclick="event.preventDefault(); navigateToMunicipio('${m.name}')">
                     <span class="municipio-name">${m.name}</span>
-                    <span class="municipio-pop">${m.pop.toLocaleString()} Habitantes</span>
+                    <span class="municipio-pop">${m.pop.toLocaleString()} Hab.</span>
                 </a>
             `;
         });
         container.innerHTML = html;
+        console.log('✅ Municipios renderizados:', municipalities.length);
     } catch (e) {
-        console.error('Error cargando municipios:', e);
-        container.innerHTML = '<p style="color:#666; padding:20px; text-align:center;">Error al cargar municipios.</p>';
+        console.error('❌ Error cargando municipios:', e);
+        container.innerHTML = '<p style="color:#666; padding:20px; text-align:center;">Error al conectar con el servidor.</p>';
     }
 }
 

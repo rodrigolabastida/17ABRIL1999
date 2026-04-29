@@ -322,7 +322,16 @@ const FEED_URLS = [
 async function extractImageFromUrl(url) {
     if (!url || !url.startsWith('http')) return null;
     try {
-        const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        // Limpieza de caracteres extraños al final de la URL (común en decodificación de Google News)
+        const cleanUrl = url.replace(/[\u007f-\uffff]/g, "").split('?')[0].trim();
+
+        const response = await fetch(cleanUrl, { 
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+            signal: AbortSignal.timeout(6000) 
+        });
+        
+        if (!response.ok) return null;
+        
         const html = await response.text();
         const $ = cheerio.load(html);
         
@@ -332,18 +341,12 @@ async function extractImageFromUrl(url) {
                   $('meta[name="twitter:image"]').attr('content') ||
                   $('link[rel="image_src"]').attr('href');
         
-        // Prioridad 2: Featured Image (WordPress y otros)
-        if (!img) img = $('.wp-post-image').attr('src') || 
-                        $('.attachment-post-thumbnail').attr('src') ||
-                        $('.entry-thumb img').attr('src') ||
-                        $('.post-thumbnail img').attr('src');
+        // Prioridad 2: Featured Image
+        if (!img) img = $('.wp-post-image').attr('src') || $('.entry-thumb img').attr('src');
 
-        // Prioridad 3: Específico para El Sol de Tlaxcala / OEM
-        if (!img) img = $('figure img').attr('src');
-        
-        // Prioridad 4: Primera imagen grande en el cuerpo
+        // Prioridad 3: Primera imagen de contenido relevante
         if (!img) {
-            $('article img, .content img, .post-content img, .td-post-content img').each((i, el) => {
+            $('article img, .content img, .post-content img').each((i, el) => {
                 const src = $(el).attr('src') || $(el).attr('data-src');
                 if (src && src.startsWith('http') && !src.includes('logo') && !src.includes('avatar') && !src.includes('pixel')) {
                     img = src;
@@ -352,13 +355,7 @@ async function extractImageFromUrl(url) {
             });
         }
         
-        // Limpieza de URLs relativas
         if (img && img.startsWith('//')) img = 'https:' + img;
-        if (img && !img.startsWith('http')) {
-            const urlObj = new URL(url);
-            img = urlObj.origin + (img.startsWith('/') ? '' : '/') + img;
-        }
-        
         return img;
     } catch (e) {
         return null;
@@ -400,9 +397,8 @@ async function fetchAllRssFeeds(force = false) {
                     }
                 }
 
-                // DEEP SCAN: Si seguimos sin imagen o es un logo de Google News, vamos a la fuente original
+                // DEEP SCAN: Si seguimos sin imagen o es un logo genérico, vamos a la fuente original
                 if (imageUrl.includes('placeholder') || imageUrl.includes('googleusercontent.com')) {
-                    // Intentamos decodificar la URL de Google News si aplica
                     let targetUrl = item.link;
                     if (feedData.source === 'Google News' && targetUrl.includes('articles/')) {
                         try {
@@ -417,15 +413,7 @@ async function fetchAllRssFeeds(force = false) {
                     const deepImg = await extractImageFromUrl(targetUrl);
                     if (deepImg && !deepImg.includes('logo') && !deepImg.includes('favicon')) {
                         imageUrl = deepImg;
-                    } else if (imageUrl.includes('googleusercontent.com')) {
-                        // Si el deep scan falló y lo que teníamos era un logo de Google, mejor poner placeholder
-                        imageUrl = '/img/placeholder-noticia.jpg';
                     }
-                }
-
-                // Limpieza final de Google News por si acaso
-                if (imageUrl.includes('lh3.googleusercontent.com')) {
-                    imageUrl = '/img/placeholder-noticia.jpg';
                 }
 
                 // Identificación de la Fuente Real (Especial para Google News)
@@ -530,6 +518,17 @@ app.get('/api/v1/feed', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.get('/api/v1/municipio/:name', async (req, res) => {
+    try {
+        const name = req.params.name;
+        // Búsqueda insensible a mayúsculas/minúsculas usando LOWER
+        const rows = await dbQuery.all('SELECT * FROM noticias WHERE LOWER(municipio_tag) = LOWER(?) ORDER BY fecha_captura DESC', [name]);
+        res.json(rows);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/api/v1/noticias/:slug', async (req, res) => {
     try {
         const noticia = await dbQuery.get('SELECT * FROM noticias WHERE slug = ?', [req.params.slug]);
@@ -557,11 +556,111 @@ app.post('/api/v1/valorar', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// --- RESTORED ENDPOINTS ---
+app.post('/api/v1/comentar', async (req, res) => {
+    const { noticia_id, comentario } = req.body;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    try {
+        await dbQuery.execute('INSERT INTO comentarios (noticia_id, user_id, comentario, ip_address) VALUES (?, ?, ?, ?)', 
+            [noticia_id, req.user ? req.user.id : null, comentario, ip]);
+        res.json({ ok: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/v1/comentarios', async (req, res) => {
+    try {
+        const { noticia_id } = req.query;
+        const rows = await dbQuery.all(`
+            SELECT c.*, COALESCE(u.nombre, 'Ciudadano Anónimo') as usuario_nombre, 
+            COALESCE(u.foto_perfil, '/img/avatar-anonimo.jpg') as foto_perfil 
+            FROM comentarios c 
+            LEFT JOIN usuarios u ON c.user_id = u.id 
+            WHERE noticia_id = ? 
+            ORDER BY c.fecha DESC
+        `, [noticia_id]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/v1/favoritos', async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Login necesario' });
+    const { noticia_id } = req.body;
+    try {
+        const existing = await dbQuery.get('SELECT * FROM registro_favoritos WHERE noticia_id = ? AND user_id = ?', [noticia_id, req.user.id]);
+        if (existing) {
+            await dbQuery.execute('DELETE FROM registro_favoritos WHERE noticia_id = ? AND user_id = ?', [noticia_id, req.user.id]);
+            res.json({ saved: false });
+        } else {
+            await dbQuery.execute('INSERT INTO registro_favoritos (noticia_id, user_id) VALUES (?, ?)', [noticia_id, req.user.id]);
+            res.json({ saved: true });
+        }
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/v1/favoritos', async (req, res) => {
+    if (!req.user) return res.json([]);
+    try {
+        const rows = await dbQuery.all(`
+            SELECT n.* FROM noticias n
+            JOIN registro_favoritos f ON n.id = f.noticia_id
+            WHERE f.user_id = ?
+            ORDER BY f.fecha DESC
+        `, [req.user.id]);
+        res.json(rows.map(formatearFront));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/v1/foro', async (req, res) => {
+    try {
+        const categoria = req.query.categoria;
+        let filter = "WHERE n.etiqueta_foro IS NOT NULL";
+        const params = [];
+
+        if (categoria && categoria !== 'Todo') {
+            filter += " AND n.etiqueta_foro = ?";
+            params.push(categoria);
+        }
+
+        const rows = await dbQuery.all(`
+            SELECT n.*, 
+            (
+                (COUNT(DISTINCT c.id) * 50 + COUNT(DISTINCT v.id) * 30) 
+            ) as interaction_score
+            FROM noticias n
+            LEFT JOIN comentarios c ON n.id = c.noticia_id
+            LEFT JOIN valoraciones v ON n.id = v.noticia_id
+            ${filter}
+            GROUP BY n.id
+            ORDER BY interaction_score DESC, n.fecha_publicacion DESC
+            LIMIT 40
+        `, params);
+
+        const foros = await Promise.all(rows.map(async (row) => {
+            const noticia = formatearFront(row);
+            const comments = await dbQuery.all(`
+                SELECT c.*, COALESCE(u.nombre, 'Ciudadano Anónimo') as usuario_nombre, 
+                COALESCE(u.foto_perfil, '/img/avatar-anonimo.jpg') as foto_perfil 
+                FROM comentarios c 
+                LEFT JOIN usuarios u ON c.user_id = u.id 
+                WHERE noticia_id = ? 
+                ORDER BY c.fecha DESC LIMIT 3
+            `, [row.id]);
+            
+            const val = await dbQuery.get('SELECT AVG(puntos) as promedio FROM valoraciones WHERE noticia_id = ?', [row.id]);
+            noticia.promedio_valoracion = val.promedio || 3;
+            noticia.comentarios_destacados = comments;
+            return noticia;
+        }));
+
+        res.json(foros);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/v1/debug', async (req, res) => {
     try {
         const rowCount = await dbQuery.get('SELECT COUNT(*) as total FROM noticias');
         const realImageCount = await dbQuery.get("SELECT COUNT(*) as total FROM noticias WHERE imageUrl NOT LIKE '%placeholder%'");
-        const last10News = await dbQuery.all('SELECT titulo, fuente, imageUrl, fecha_captura FROM noticias ORDER BY fecha_captura DESC LIMIT 10');
+        const last10News = await dbQuery.all('SELECT titulo, fuente, imageUrl, municipio_tag, fecha_captura FROM noticias ORDER BY fecha_captura DESC LIMIT 10');
         res.json({
             dbType,
             rowCount: rowCount.total,
