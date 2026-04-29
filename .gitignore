@@ -1,3 +1,9 @@
 node_modules/
 .env
 .DS_Store
+intlax.db*
+scratch/
+*.json_pp
+debug_output.txt
+deployments.json
+intlax_deploy.zip

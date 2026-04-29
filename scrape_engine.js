@@ -1,11 +1,14 @@
 const Parser = require('rss-parser');
 const mysql = require('mysql2/promise');
+const cheerio = require('cheerio');
 const parser = new Parser({
     customFields: {
         item: [
             ['media:content', 'mediaContent'],
+            ['media:thumbnail', 'mediaThumbnail'],
             ['enclosure', 'enclosure'],
-            ['content:encoded', 'contentEncoded']
+            ['content:encoded', 'contentEncoded'],
+            'content'
         ]
     }
 });
@@ -59,16 +62,20 @@ async function run() {
                             .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
                             .replace(/ /g, '-').replace(/[^\w-]+/g, '');
 
-                // Lógica de Extracción de Imagen Robusta
+                // Lógica de Extracción de Imagen Robusta (Image Hunter v3)
                 let img = '/img/placeholder-noticia.jpg';
                 if (item.enclosure && item.enclosure.url) img = item.enclosure.url;
                 else if (item.mediaContent && item.mediaContent.$ && item.mediaContent.$.url) img = item.mediaContent.$.url;
-                else if (item.contentEncoded) {
-                    const match = item.contentEncoded.match(/<img[^>]+src="([^">]+)"/);
-                    if (match) img = match[1];
+                else if (item.mediaThumbnail && item.mediaThumbnail.$ && item.mediaThumbnail.$.url) img = item.mediaThumbnail.$.url;
+                else {
+                    const htmlContent = (item.contentEncoded || '') + (item.contentSnippet || '') + (item.content || '');
+                    if (htmlContent.includes('<img')) {
+                        const $ = cheerio.load(htmlContent);
+                        const foundImg = $('img').attr('src');
+                        if (foundImg && foundImg.startsWith('http')) img = foundImg;
+                    }
                 }
                 
-                // Si es de Google News, intentamos limpiar la URL de la imagen si viniera en el snippet
                 if (feedData.source === 'Google News' && img.includes('placeholder')) {
                      const matchSnippet = (item.content || '').match(/src="([^">]+)"/);
                      if (matchSnippet) img = matchSnippet[1];
@@ -78,7 +85,9 @@ async function run() {
                     const [res] = await connection.execute(`
                         INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, vistas, municipio, lat, lng, fecha_captura, slug, etiqueta_foro, autor, categoria_impacto, municipio_tag, multiplicador_categoria)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE vistas = vistas + 0
+                        ON DUPLICATE KEY UPDATE 
+                            imageUrl = IF(imageUrl LIKE '%placeholder%', VALUES(imageUrl), imageUrl),
+                            vistas = vistas + 0
                     `, [
                         Math.random().toString(36).substr(2, 9), 
                         item.title, 

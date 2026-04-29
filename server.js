@@ -60,7 +60,14 @@ const parser = new Parser({
         'Accept': 'application/rss+xml, application/xml;q=0.9, */*;q=0.8'
     },
     customFields: {
-        item: ['description', 'content:encoded', 'media:content', 'enclosure']
+        item: [
+            ['media:content', 'mediaContent'],
+            ['media:thumbnail', 'mediaThumbnail'],
+            ['enclosure', 'enclosure'],
+            ['content:encoded', 'contentEncoded'],
+            'description',
+            'content'
+        ]
     }
 });
 
@@ -160,7 +167,7 @@ async function analyzeNewsNLP(title, summary) {
 
 // Inicialización de DB con Blindaje Contra Colapsos (MariaDB -> SQLite Fallback)
 async function initDB() {
-    console.log('⚙️ Sincronización MariaDB v6.2.4...');
+    console.log('⚙️ Sincronización MariaDB v6.2.8...');
     try {
         // Intento de conexión MariaDB
         await pool.execute('SELECT 1');
@@ -311,30 +318,60 @@ async function fetchAllRssFeeds(force = false) {
     let nuevas = 0, actualizadas = 0;
     let erroresArr = [];
 
+    console.log('🔄 Iniciando sincronización de feeds robusta v6.2.8...');
+
     for (const feedData of FEED_URLS) {
         try {
             const feed = await parser.parseURL(feedData.url);
-            for (const item of feed.items.slice(0, 5)) {
+            for (const item of feed.items.slice(0, 15)) {
                 const title = item.title;
                 const summaryText = (item.description || item.content || item.contentSnippet || '').replace(/<[^>]+>/g, '').trim();
                 
                 // Semantización NLP
                 const nlp = await analyzeNewsNLP(title, summaryText);
                 
-                const imageUrl = (item.enclosure && item.enclosure.url) || '/img/placeholder-noticia.jpg';
+                // Extracción de Imagen Robusta (Image Hunter v3 - Cheerio Edition)
+                let imageUrl = '/img/placeholder-noticia.jpg';
+                
+                if (item.enclosure && item.enclosure.url) {
+                    imageUrl = item.enclosure.url;
+                } else if (item.mediaContent && item.mediaContent.$ && item.mediaContent.$.url) {
+                    imageUrl = item.mediaContent.$.url;
+                } else if (item.mediaThumbnail && item.mediaThumbnail.$ && item.mediaThumbnail.$.url) {
+                    imageUrl = item.mediaThumbnail.$.url;
+                } else {
+                    // Buscar en campos HTML (contentEncoded, description, content)
+                    const htmlContent = (item.contentEncoded || '') + (item.description || '') + (item.content || '');
+                    if (htmlContent.includes('<img')) {
+                        const $ = cheerio.load(htmlContent);
+                        const foundImg = $('img').attr('src');
+                        if (foundImg && foundImg.startsWith('http')) {
+                            imageUrl = foundImg;
+                        }
+                    }
+                }
+
+                // Limpieza específica para Google News si sigue fallando
+                if (feedData.source === 'Google News' && imageUrl.includes('placeholder')) {
+                     const match = (item.content || '').match(/src="([^">]+)"/);
+                     if (match) imageUrl = match[1];
+                }
+
                 const slug = generarSlug(title);
+                const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
                 
                 try {
                     const res = await dbQuery.execute(`
                         INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, fecha_captura, slug, categoria_impacto, municipio_tag, multiplicador_categoria)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON DUPLICATE KEY UPDATE 
+                            imageUrl = VALUES(imageUrl),
                             puntuacion = VALUES(puntuacion),
                             categoria_impacto = VALUES(categoria_impacto),
                             multiplicador_categoria = VALUES(multiplicador_categoria)
                     `, [Math.random().toString(36).substr(2, 9), title, summaryText, imageUrl, item.link, feedData.source, 
-                       item.pubDate ? new Date(item.pubDate).toISOString().slice(0, 19).replace('T', ' ') : new Date().toISOString().slice(0, 19).replace('T', ' '), 
-                       50, slug, nlp.categoria, nlp.municipio, nlp.multiplicador]);
+                       item.pubDate ? new Date(item.pubDate).toISOString().slice(0, 19).replace('T', ' ') : now, 
+                       50, now, slug, nlp.categoria, nlp.municipio, nlp.multiplicador]);
                     
                     if (res.affectedRows === 1) nuevas++;
                     else actualizadas++;
@@ -344,6 +381,7 @@ async function fetchAllRssFeeds(force = false) {
     }
     const duration = Date.now() - startTime;
     await dbQuery.execute('INSERT INTO historial_extraccion (nuevas, actualizadas, errores, duracion_ms) VALUES (?, ?, ?, ?)', [nuevas, actualizadas, erroresArr.join(', '), duration]);
+    console.log(`✅ Sincronización completada: ${nuevas} nuevas, ${actualizadas} actualizadas.`);
 }
 
 cron.schedule('*/30 * * * *', () => fetchAllRssFeeds(true));
@@ -357,12 +395,12 @@ function formatearFront(row) {
         summary: row.resumen,
         source: row.fuente,
         views: row.vistas || 0,
-        imageUrl: row.imageUrl && row.imageUrl !== '' ? row.imageUrl : '/img/placeholder-noticia.jpg',
+        imageUrl: (row.imageUrl && row.imageUrl !== '' && row.imageUrl !== 'null') ? row.imageUrl : '/img/placeholder-noticia.jpg',
         link: row.linkOriginal,
         slug: row.slug,
         puntuacion: row.puntuacion || 3,
         time: row.fecha_publicacion ? new Date(row.fecha_publicacion).toLocaleDateString() : 'Hoy',
-        image: row.imageUrl && row.imageUrl !== '' ? row.imageUrl : '/img/placeholder-noticia.jpg'
+        image: (row.imageUrl && row.imageUrl !== '' && row.imageUrl !== 'null') ? row.imageUrl : '/img/placeholder-noticia.jpg'
     };
 }
 
