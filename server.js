@@ -251,7 +251,7 @@ async function initDB() {
         dbType = 'sqlite';
         sqliteDB = new sqlite3.Database(path.join(__dirname, 'intlax.db'), (err) => {
             if (err) console.error('❌ Error fatal: Tampoco se pudo cargar SQLite:', err.message);
-            else console.log('✅ Base de datos SQLite <span style="font-size:9px; color:#555; font-weight:700; letter-spacing:0.5px; opacity:0.6;">v6.2.9</span> y conectada.');
+            else console.log('✅ Base de datos SQLite v6.3.0 y conectada.');
         });
         
         // Sincronización básica de esquema SQLite (por si acaso)
@@ -578,7 +578,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public/home.html')));
 
 app.listen(PORT, async () => {
-    console.log(`🚀 Intlax MariaDB v6.2.9 ACTIVO en puerto ${PORT}`);
+    console.log(`🚀 Intlax MariaDB v6.3.0 ACTIVO en puerto ${PORT}`);
     await initDB();
     setTimeout(fetchAllRssFeeds, 5000);
 });
