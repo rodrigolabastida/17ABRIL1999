@@ -394,16 +394,32 @@ async function fetchAllRssFeeds(force = false) {
                     }
                 }
 
-                // DEEP SCAN: Si seguimos sin imagen, vamos a la fuente original
-                if (imageUrl.includes('placeholder')) {
-                    const deepImg = await extractImageFromUrl(item.link);
-                    if (deepImg) imageUrl = deepImg;
+                // DEEP SCAN: Si seguimos sin imagen o es un logo de Google News, vamos a la fuente original
+                if (imageUrl.includes('placeholder') || imageUrl.includes('googleusercontent.com')) {
+                    // Intentamos decodificar la URL de Google News si aplica
+                    let targetUrl = item.link;
+                    if (feedData.source === 'Google News' && targetUrl.includes('articles/')) {
+                        try {
+                            const parts = targetUrl.split('articles/');
+                            const b64 = parts[parts.length - 1].split('?')[0];
+                            const decoded = Buffer.from(b64, 'base64').toString('binary');
+                            const urlMatch = decoded.match(/https?:\/\/[^\s\x00-\x1f!@#$%^&*()_+={}\[\]:;|<>,?]+/);
+                            if (urlMatch) targetUrl = urlMatch[0];
+                        } catch (e) {}
+                    }
+                    
+                    const deepImg = await extractImageFromUrl(targetUrl);
+                    if (deepImg && !deepImg.includes('logo') && !deepImg.includes('favicon')) {
+                        imageUrl = deepImg;
+                    } else if (imageUrl.includes('googleusercontent.com')) {
+                        // Si el deep scan falló y lo que teníamos era un logo de Google, mejor poner placeholder
+                        imageUrl = '/img/placeholder-noticia.jpg';
+                    }
                 }
 
-                // Limpieza específica para Google News
-                if (feedData.source === 'Google News' && imageUrl.includes('placeholder')) {
-                     const match = (item.content || '').match(/src="([^">]+)"/);
-                     if (match) imageUrl = match[1];
+                // Limpieza final de Google News por si acaso
+                if (imageUrl.includes('lh3.googleusercontent.com')) {
+                    imageUrl = '/img/placeholder-noticia.jpg';
                 }
 
                 const slug = generarSlug(title);
