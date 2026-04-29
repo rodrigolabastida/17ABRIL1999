@@ -245,7 +245,11 @@ async function initDB() {
             )`
         ];
         for (const sql of schema) { await pool.execute(sql); }
-        console.log('✅ Tablas MariaDB sincronizadas v6.2.4.');
+        
+        // Limpieza retroactiva de fuentes Google News
+        await pool.execute("UPDATE noticias SET fuente = TRIM(SUBSTRING_INDEX(titulo, ' - ', -1)) WHERE fuente = 'Google News' AND titulo LIKE '% - %'");
+        
+        console.log('✅ Tablas MariaDB sincronizadas v6.3.0.');
     } catch (dbErr) {
         console.error('⚠️ ALERTA: MariaDB no disponible. Activando Respaldo SQLite.');
         dbType = 'sqlite';
@@ -425,8 +429,11 @@ async function fetchAllRssFeeds(force = false) {
                 // Identificación de la Fuente Real (Especial para Google News)
                 let source = feedData.source;
                 if (feedData.source === 'Google News') {
-                    // rss-parser suele poner el nombre del medio en item.source o al final del título
-                    if (item.source) {
+                    const htmlContent = (item.content || '');
+                    const fontMatch = htmlContent.match(/<font[^>]*>(.*?)<\/font>/);
+                    if (fontMatch) {
+                        source = fontMatch[1].replace(/<[^>]+>/g, '').trim();
+                    } else if (item.source) {
                         source = (typeof item.source === 'object') ? (item.source._ || item.source.name || source) : item.source;
                     } else if (title.includes(' - ')) {
                         const parts = title.split(' - ');
