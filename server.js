@@ -322,33 +322,39 @@ const FEED_URLS = [
 async function extractImageFromUrl(url) {
     if (!url || !url.startsWith('http')) return null;
     try {
-        // Limpieza de caracteres extraños al final de la URL (común en decodificación de Google News)
-        const cleanUrl = url.replace(/[\u007f-\uffff]/g, "").split('?')[0].trim();
-
-        const response = await fetch(cleanUrl, { 
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-            signal: AbortSignal.timeout(6000) 
+        const response = await fetch(url, { 
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'es-MX,es;q=1'
+            },
+            signal: AbortSignal.timeout(10000) 
         });
         
         if (!response.ok) return null;
-        
         const html = await response.text();
         const $ = cheerio.load(html);
         
-        // Prioridad 1: OpenGraph y Twitter
-        let img = $('meta[property="og:image"]').attr('content') || 
-                  $('meta[property="og:image:secure_url"]').attr('content') ||
+        // Prioridad 1: Meta Tags de Alta Calidad
+        let img = $('meta[property="og:image:secure_url"]').attr('content') ||
+                  $('meta[property="og:image"]').attr('content') || 
                   $('meta[name="twitter:image"]').attr('content') ||
+                  $('meta[name="twitter:image:src"]').attr('content') ||
                   $('link[rel="image_src"]').attr('href');
         
-        // Prioridad 2: Featured Image
-        if (!img) img = $('.wp-post-image').attr('src') || $('.entry-thumb img').attr('src');
+        // Prioridad 2: WordPress Featured Image y Sliders
+        if (!img) img = $('.wp-post-image').attr('src') || 
+                        $('.attachment-post-thumbnail').attr('src') ||
+                        $('.entry-thumb img').attr('src') ||
+                        $('.post-thumbnail img').attr('src') ||
+                        $('.td-post-featured-image img').attr('src');
 
-        // Prioridad 3: Primera imagen de contenido relevante
+        // Prioridad 3: Selectores universales de imagen principal
         if (!img) {
-            $('article img, .content img, .post-content img').each((i, el) => {
-                const src = $(el).attr('src') || $(el).attr('data-src');
-                if (src && src.startsWith('http') && !src.includes('logo') && !src.includes('avatar') && !src.includes('pixel')) {
+            // Buscamos la primera imagen en el artículo que no sea un icono
+            $('article img, main img, .content img, .post-content img, .td-post-content img').each((i, el) => {
+                const src = $(el).attr('src') || $(el).attr('data-src') || $(el).attr('data-lazy-src');
+                if (src && src.startsWith('http') && !src.includes('logo') && !src.includes('avatar') && !src.includes('pixel') && !src.includes('icon')) {
                     img = src;
                     return false; 
                 }
