@@ -368,6 +368,76 @@ async function extractImageFromUrl(url) {
     }
 }
 
+// Configuración de Búsqueda Activa (Deep Crawl)
+const CRAWL_KEYWORDS = ['Calpulalpan', 'Tlaxcala', 'Apizaco', 'Huamantla'];
+const CRAWL_SOURCES = [
+    { name: 'Gentetlx', searchUrl: 'https://www.gentetlx.com.mx/?s={query}' },
+    { name: '385 Grados', searchUrl: 'https://www.385grados.com/?s={query}' },
+    { name: 'Quadratín Tlaxcala', searchUrl: 'https://tlaxcala.quadratin.com.mx/?s={query}' },
+    { name: 'e-Tlaxcala', searchUrl: 'https://e-tlaxcala.mx/?s={query}' }
+];
+
+async function deepCrawlKeywords() {
+    console.log('🕵️ Iniciando Deep Keyword Crawl...');
+    let totalNuevas = 0;
+
+    for (const keyword of CRAWL_KEYWORDS) {
+        for (const source of CRAWL_SOURCES) {
+            try {
+                const searchUrl = source.searchUrl.replace('{query}', encodeURIComponent(keyword));
+                const res = await fetch(searchUrl, { 
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36' },
+                    signal: AbortSignal.timeout(15000)
+                });
+                if (!res.ok) continue;
+                
+                const html = await res.text();
+                const $ = cheerio.load(html);
+                const items = [];
+
+                // Selectores universales para WordPress y medios locales
+                $('h1, h2, h3').each((i, el) => {
+                    if (items.length >= 10) return false;
+                    const title = $(el).text().trim();
+                    const link = $(el).find('a').attr('href') || $(el).closest('a').attr('href');
+                    
+                    if (title && link && link.startsWith('http') && title.length > 15) {
+                        // Solo si el título contiene la palabra clave para evitar "ruido" de barras laterales
+                        if (title.toLowerCase().includes(keyword.toLowerCase())) {
+                            items.push({ title, link });
+                        }
+                    }
+                });
+
+                for (const item of items) {
+                    try {
+                        const existing = await dbQuery.get('SELECT id FROM noticias WHERE linkOriginal = ?', [item.link]);
+                        if (existing) continue;
+
+                        const imageUrl = await extractImageFromUrl(item.link) || '/img/placeholder-noticia.jpg';
+                        const nlp = await analyzeNewsNLP(item.title, "");
+                        const slug = generarSlug(item.title);
+                        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+                        await dbQuery.execute(`
+                            INSERT INTO noticias (id, titulo, resumen, linkOriginal, imageUrl, fuente, categoria_impacto, municipio_tag, multiplicador_categoria, slug, fecha_publicacion, fecha_captura, puntuacion)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        `, [Math.random().toString(36).substr(2, 9), item.title, "", item.link, imageUrl, source.name, nlp.categoria, nlp.municipio, nlp.multiplicador, slug, now, now, 50]);
+                        
+                        totalNuevas++;
+                    } catch (err) { /* Silencioso por item */ }
+                }
+            } catch (e) {
+                console.error(`❌ Error en Deep Crawl [${source.name}] para [${keyword}]:`, e.message);
+            }
+        }
+    }
+    console.log(`✅ Deep Crawl finalizado. ${totalNuevas} noticias nuevas encontradas.`);
+}
+
+// Ejecutar cada 2 horas
+cron.schedule('0 */2 * * *', deepCrawlKeywords);
+
 async function fetchAllRssFeeds(force = false) {
     const startTime = Date.now();
     let nuevas = 0, actualizadas = 0;
@@ -748,7 +818,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public/home.html')));
 
 app.listen(PORT, async () => {
-    console.log(`🚀 Intlax MariaDB v6.3.1 ACTIVO en puerto ${PORT}`);
+    console.log(`🚀 Intlax MariaDB v6.3.4 ACTIVO en puerto ${PORT}`);
     await initDB();
     setTimeout(fetchAllRssFeeds, 5000);
+    setTimeout(deepCrawlKeywords, 15000); // 10 segundos después del RSS general
 });
