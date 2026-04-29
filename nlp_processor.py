@@ -2,9 +2,18 @@ import sys
 import json
 
 MUNICIPIOS_TLAXCALA = [
-    "Calpulalpan", "Tlaxcala", "Apizaco", "Huamantla", "Chiautempan", 
-    "Zacatelco", "San Pablo del Monte", "Tlaxco", "Contla", "Ixtacuixtla",
-    "Panotla", "Tetla", "Totolac", "Papalotla", "Yauhquemehcan"
+    "Acuamanala de Miguel Hidalgo", "Amaxac de Guerrero", "Apetatitlán de Antonio Carvajal", "Apizaco", "Atlangatepec",
+    "Altzayanca", "Benito Juárez", "Calpulalpan", "Chiautempan", "Contla de Juan Cuamatzi",
+    "Cuapiaxtla", "Cuaxomulco", "El Carmen Tequexquitla", "Emiliano Zapata", "Españita",
+    "Huamantla", "Ixtacuixtla de Mariano Matamoros", "Ixtenco", "La Magdalena Tlaltelulco", "Lázaro Cárdenas",
+    "Mazatecochco de José María Morelos", "Muñoz de Domingo Arenas", "Nanacamilpa de Mariano Arista", "Nativitas", "Panotla",
+    "Papalotla de Xicohténcatl", "San Damián Texoloc", "San Francisco Tetlanohcan", "San Jerónimo Zacualpan", "San José Teacalco",
+    "San Juan Huactzinco", "San Lorenzo Axocomanitla", "San Lucas Tecopilco", "San Pablo del Monte", "Sanctórum de Lázaro Cárdenas",
+    "Santa Ana Nopalucan", "Santa Apolonia Teacalco", "Santa Catarina Ayometla", "Santa Cruz Quilehtla", "Santa Cruz Tlaxcala",
+    "Santa Isabel Xiloxoxtla", "Tenancingo", "Teolocholco", "Tepetitla de Lardizábal", "Tepeyanco",
+    "Terrenate", "Tetla de la Solidaridad", "Tetlatlahuca", "Tlaxcala", "Tlaxco",
+    "Tocatlán", "Totolac", "Tzompantepec", "Xaloztoc", "Xaltocan",
+    "Xicohtzinco", "Yauhquemehcan", "Zacatelco", "Zitlaltépec de Trinidad Sánchez Santos"
 ]
 
 KEYWORDS_ALTO_IMPACTO = ["accidente", "balacera", "robo", "emergencia", "fallece", "muerto", "choque", "homicidio", "ejecutado"]

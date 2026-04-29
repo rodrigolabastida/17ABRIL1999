@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     checkUserSession();
     setupDragScroll();
     setupGeoButton(); // Nueva función para el botón manual
+    renderMunicipalities(); // Cargar municipios en la vista búsqueda
 
     // Timeout de seguridad: Si en 4s no cargan las noticias, forzamos la entrada
     setTimeout(() => {
@@ -99,6 +100,13 @@ async function handleRouting() {
         if (slug) {
             console.log('🤖 Router: Detectada página de noticia para slug:', slug);
             await loadArticleBySlug(slug);
+            return true;
+        }
+    } else if (path.startsWith('/municipio/')) {
+        const name = path.split('/').pop();
+        if (name) {
+            console.log('🤖 Router: Detectada página de municipio:', name);
+            await loadMunicipio(decodeURIComponent(name));
             return true;
         }
     }
@@ -492,6 +500,12 @@ function setupBottomNav() {
         } else if (viewId === 'search') {
             searchView.classList.remove('hidden');
             searchBtn.classList.add('active');
+            // Si no hay búsqueda, mostramos los municipios
+            const input = document.getElementById('input-busqueda');
+            if(input && input.value.length === 0) {
+                document.getElementById('municipios-section')?.classList.remove('hidden');
+                document.getElementById('contenedor-resultados-busqueda').innerHTML = '';
+            }
         } else if (viewId === 'profile') {
             profileView.classList.remove('hidden');
             profileBtn.classList.add('active');
@@ -516,6 +530,16 @@ function setupBottomNav() {
     const inputBusqueda = document.getElementById('input-busqueda');
     inputBusqueda.addEventListener('input', (e) => {
         const term = e.target.value;
+        const municipiosSection = document.getElementById('municipios-section');
+        const searchResults = document.getElementById('contenedor-resultados-busqueda');
+
+        if (term.length === 0) {
+            municipiosSection?.classList.remove('hidden');
+            if(searchResults) searchResults.innerHTML = '';
+        } else {
+            municipiosSection?.classList.add('hidden');
+        }
+
         if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
         searchDebounceTimeout = setTimeout(() => {
             executeSearch(term);
@@ -915,6 +939,106 @@ async function triggerGeoSearch() {
 window.retryGeoSearch = () => {
     triggerGeoSearch();
 };
+
+// --- LOGICA DE MUNICIPIOS (SEO & NAVIGATION) ---
+async function renderMunicipalities() {
+    const container = document.getElementById('lista-municipios');
+    if (!container) return;
+
+    try {
+        const res = await fetch('/api/v1/municipalities');
+        const municipalities = await res.json();
+        
+        let html = '';
+        municipalities.forEach(m => {
+            html += `
+                <a href="/municipio/${m.name.toLowerCase()}" class="municipio-card" onclick="event.preventDefault(); navigateToMunicipio('${m.name}')">
+                    <span class="municipio-name">${m.name}</span>
+                    <span class="municipio-pop">${m.pop.toLocaleString()} Habitantes</span>
+                </a>
+            `;
+        });
+        container.innerHTML = html;
+    } catch (e) {
+        console.error('Error cargando municipios:', e);
+        container.innerHTML = '<p style="color:#666; padding:20px; text-align:center;">Error al cargar municipios.</p>';
+    }
+}
+
+async function navigateToMunicipio(name) {
+    window.history.pushState({}, '', `/municipio/${name.toLowerCase()}`);
+    await loadMunicipio(name);
+}
+
+async function loadMunicipio(name) {
+    const preloader = document.getElementById('preloader');
+    if(preloader) preloader.classList.remove('preloader-hidden');
+
+    try {
+        const res = await fetch(`/api/v1/municipio/${encodeURIComponent(name)}`);
+        const articles = await res.json();
+        
+        // Cambiar vista a Search
+        const searchBtn = document.getElementById('nav-search');
+        if(searchBtn) searchBtn.click(); // Esto usa la lógica de showView('search')
+        
+        renderMunicipioView(name, articles);
+        
+        if(preloader) preloader.classList.add('preloader-hidden');
+    } catch (e) {
+        console.error('Error cargando noticias de municipio:', e);
+        if(preloader) preloader.classList.add('preloader-hidden');
+    }
+}
+
+function renderMunicipioView(name, articles) {
+    const container = document.getElementById('contenedor-resultados-busqueda');
+    const input = document.getElementById('input-busqueda');
+    const municipiosSection = document.getElementById('municipios-section');
+    
+    if(input) input.value = name;
+    if(municipiosSection) municipiosSection.classList.add('hidden');
+    
+    let html = `
+        <div class="municipio-detail-header" style="padding: 20px; background: linear-gradient(to bottom, #151517, #0A0A0B); border-bottom: 1px solid #222; margin-bottom: 15px;">
+            <h2 style="font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 5px;">Noticias de ${name}</h2>
+            <p style="color: var(--accent); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Archivo Local • Tlaxcala</p>
+        </div>
+    `;
+    
+    if (articles && articles.length > 0) {
+        articles.forEach((noticia, index) => {
+            html += `
+                <a href="/noticias/${noticia.slug}" class="news-card-link" style="text-decoration:none; color:inherit;">
+                    <article class="news-card" data-id="${noticia.id}" style="animation-delay: ${index * 0.05}s">
+                        <img class="news-thumb" src="${noticia.imageUrl}" alt="${noticia.source}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
+                        <div class="news-info">
+                            <h3 class="news-title">${noticia.title}</h3>
+                            <div class="news-bottom">
+                                <div class="news-meta">
+                                     <span style="color:var(--accent); font-weight:700;">${noticia.source}</span>
+                                     <span>• ${(noticia.views/1000).toFixed(1)}K lecturas</span>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                </a>
+            `;
+        });
+    } else {
+        html += `
+            <div class="empty-state">
+                <i class='bx bx-news'></i>
+                <p>No se encontraron noticias específicas para ${name}.</p>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+window.navigateToMunicipio = navigateToMunicipio;
+window.renderMunicipalities = renderMunicipalities;
 
 window.closeGeoOverlay = () => {
     const overlay = document.getElementById('geo-search-overlay');

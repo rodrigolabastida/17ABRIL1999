@@ -9,6 +9,7 @@ const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
 const fs = require('fs');
+const municipalities = JSON.parse(fs.readFileSync(path.join(__dirname, 'municipalities_data.json'), 'utf8')).sort((a, b) => b.pop - a.pop);
 const { spawn } = require('child_process');
 const sqlite3 = require('sqlite3').verbose();
 
@@ -284,8 +285,8 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
         try {
             let user = await dbQuery.get('SELECT * FROM usuarios WHERE google_id = ?', [profile.id]);
             if (!user) {
-                const [result] = await pool.execute('INSERT INTO usuarios (google_id, nombre, email, foto_perfil) VALUES (?, ?, ?, ?)', 
-                    [profile.id, profile.displayName, profile.emails[0].value, profile.photos[0].value]);
+                const result = await dbQuery.execute('INSERT INTO usuarios (google_id, nombre, email, foto_perfil) VALUES (?, ?, ?, ?)', 
+                    [profile.id, profile.displayName, (profile.emails && profile.emails[0].value) || '', (profile.photos && profile.photos[0].value) || '']);
                 user = await dbQuery.get('SELECT * FROM usuarios WHERE id = ?', [result.insertId]);
             }
             return done(null, user);
@@ -580,6 +581,62 @@ app.get('/api/v1/user-status', (req, res) => {
     if (!req.user) return res.json({});
     const adminEmail = process.env.ADMIN_EMAIL || 'brayanrodrigolabastidasilva@gmail.com';
     res.json({ ...req.user, isAdmin: (req.user.rol === 'admin' || req.user.email === adminEmail) });
+});
+
+// Auth Routes
+app.get('/auth/google', authConfigured, passport.authenticate('google', { scope: ['profile', 'email'] }));
+app.get('/auth/google/callback', authConfigured, passport.authenticate('google', { failureRedirect: '/' }), (req, res) => {
+    res.redirect('/');
+});
+app.get('/auth/logout', (req, res) => {
+    req.logout((err) => {
+        res.redirect('/');
+    });
+});
+
+app.get('/api/v1/municipalities', (req, res) => {
+    res.json(municipalities);
+});
+
+app.get('/api/v1/municipio/:nombre', async (req, res) => {
+    try {
+        const nombre = req.params.nombre;
+        // Buscamos noticias que tengan el tag del municipio o que lo mencionen en el título/resumen
+        const query = `
+            SELECT * FROM noticias 
+            WHERE municipio_tag = ? OR titulo LIKE ? OR resumen LIKE ?
+            ORDER BY fecha_captura DESC LIMIT 50
+        `;
+        const searchTerm = `%${nombre}%`;
+        const rows = await dbQuery.all(query, [nombre, searchTerm, searchTerm]);
+        res.json(rows.map(formatearFront));
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/municipio/:nombre', async (req, res) => {
+    const nombre = req.params.nombre;
+    const municipio = municipalities.find(m => m.name.toLowerCase() === nombre.toLowerCase());
+    
+    // Si no existe el municipio, redirigir a home
+    if (!municipio) return res.redirect('/');
+
+    // Renderizado básico para SEO
+    const htmlPath = path.join(__dirname, 'public/home.html');
+    let html = fs.readFileSync(htmlPath, 'utf8');
+    
+    // Inyectar Meta Tags para SEO
+    const seoTitle = `Noticias de ${municipio.name} | Intlax`;
+    const seoDesc = `Descubre las noticias más recientes y relevantes de ${municipio.name}, Tlaxcala. Información actualizada al momento en Intlax.`;
+    
+    html = html.replace('<title>Noticias de Tlaxcala | Intlax</title>', `<title>${seoTitle}</title>`);
+    html = html.replace('</head>', `
+        <meta name="description" content="${seoDesc}">
+        <meta property="og:title" content="${seoTitle}">
+        <meta property="og:description" content="${seoDesc}">
+        <meta name="keywords" content="noticias, ${municipio.name}, tlaxcala, actualidad, eventos, reportes">
+    </head>`);
+
+    res.send(html);
 });
 
 app.use(express.static(path.join(__dirname, 'public')));

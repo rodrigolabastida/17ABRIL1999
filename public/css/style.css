@@ -1350,3 +1350,100 @@ body {
     color: var(--text-sec);
     font-weight: 600;
 }
+/* ------------------------------------- */
+/* ESTILOS DE MUNICIPIOS (SEO & EXPLORE) */
+/* ------------------------------------- */
+
+.municipios-section {
+    padding: 30px 20px;
+    background: linear-gradient(to bottom, transparent, rgba(255,193,7,0.02));
+    border-top: 1px solid rgba(255,255,255,0.05);
+    margin-top: 20px;
+}
+
+.section-subtitle {
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-primary);
+}
+
+.section-desc {
+    font-size: 14px;
+    color: var(--text-sec);
+    margin-bottom: 24px;
+    line-height: 1.4;
+}
+
+.municipios-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.municipio-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-glass);
+    padding: 16px;
+    border-radius: 16px;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.municipio-card:active {
+    transform: scale(0.96);
+    background: #1a1a1c;
+    border-color: var(--accent);
+}
+
+.municipio-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.municipio-pop {
+    font-size: 11px;
+    color: var(--text-sec);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.loading-municipios {
+    grid-column: span 2;
+    text-align: center;
+    padding: 40px;
+    color: var(--text-sec);
+    font-size: 14px;
+}
+
+/* Vista Detalle Municipio (Inyectada por JS) */
+.municipio-detail-header {
+    padding: 30px 20px;
+    background: linear-gradient(135deg, #1C1C1E 0%, #0A0A0B 100%);
+    border-bottom: 1px solid var(--border-glass);
+    margin-bottom: 20px;
+}
+
+.municipio-title {
+    font-size: 28px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+}
+
+.municipio-meta {
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
