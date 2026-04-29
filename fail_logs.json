@@ -1,0 +1,9 @@
+◇ injected env (12) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"domain\":\"intlax.com\",\"username\":\"u653801218\",\"buildUuid\":\"019dda35-713d-729c-87b2-dc8e0e82fc8f\",\"fromLine\":0,\"logs\":{\"logs\":null,\"lines\":0}}"
+    }
+  ]
+}
