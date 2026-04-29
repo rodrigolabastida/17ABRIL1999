@@ -411,10 +411,20 @@ async function deepCrawlKeywords() {
 
                 for (const item of items) {
                     try {
-                        const existing = await dbQuery.get('SELECT id FROM noticias WHERE linkOriginal = ?', [item.link]);
-                        if (existing) continue;
-
+                        // UPSERT Lógica: Si ya existe por título o link, verificamos si podemos mejorar la imagen
+                        const existing = await dbQuery.get('SELECT id, imageUrl FROM noticias WHERE titulo = ? OR linkOriginal = ?', [item.title, item.link]);
+                        
                         const imageUrl = await extractImageFromUrl(item.link) || '/img/placeholder-noticia.jpg';
+
+                        if (existing) {
+                            // Si el existente tiene placeholder y el nuevo tiene imagen real, actualizamos
+                            if (existing.imageUrl.includes('placeholder') && !imageUrl.includes('placeholder')) {
+                                await dbQuery.execute('UPDATE noticias SET imageUrl = ?, linkOriginal = ?, fuente = ? WHERE id = ?', 
+                                    [imageUrl, item.link, source.name, existing.id]);
+                            }
+                            continue;
+                        }
+
                         const nlp = await analyzeNewsNLP(item.title, "");
                         const slug = generarSlug(item.title);
                         const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
