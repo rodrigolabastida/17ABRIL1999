@@ -825,19 +825,52 @@ async function postQuickComment(noticiaId) {
 window.postQuickComment = postQuickComment;
 window.renderForosView = renderForosView;
 
-// --- LÓGICA DE APERTURA DE NOTICIAS (v2.0 - Bye Bye Iframes) ---
+// --- LÓGICA DE MODO LECTURA IN-APP (v3.0) ---
 window.openInAppBrowser = function(url) {
     if (!url) return;
     
-    console.log('🚀 Abriendo noticia original en nueva pestaña:', url);
-    
-    // Abrimos en una pestaña nueva para evitar bloqueos X-Frame-Options
-    const newWindow = window.open(url, '_blank');
-    
-    // Si el navegador bloqueó el popup, avisamos al usuario (raro pero posible)
-    if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-        alert('Por favor, permite las ventanas emergentes para ver la nota completa.');
-    }
+    const modal = document.getElementById('iframe-modal');
+    const readerContainer = document.getElementById('reader-container');
+    const readerContent = document.getElementById('reader-content');
+    const iframeWrapper = document.getElementById('iframe-wrapper');
+    const externalLink = document.getElementById('reader-external-link');
+
+    if (!modal || !readerContent) return;
+
+    // Mostrar modal y estado de carga
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    readerContainer.style.display = 'block';
+    iframeWrapper.style.display = 'none';
+    readerContent.innerHTML = `
+        <div style="text-align:center; padding:50px;">
+            <i class='bx bx-loader-alt bx-spin' style="font-size:40px; color:var(--accent);"></i>
+            <p style="margin-top:20px; color:var(--text-sec);">Optimizando lectura...</p>
+        </div>
+    `;
+
+    // Consultar el modo lectura al servidor
+    fetch(`/api/v1/reader?url=${encodeURIComponent(url)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                readerContent.innerHTML = data.content;
+                externalLink.href = url;
+                console.log('✅ Modo lectura cargado con éxito');
+            } else {
+                throw new Error('No se pudo optimizar');
+            }
+        })
+        .catch(err => {
+            console.warn('⚠️ Falló modo lectura, redirigiendo a externo:', err);
+            readerContent.innerHTML = `
+                <div style="text-align:center; padding:50px;">
+                    <i class='bx bx-link-external' style="font-size:40px; color:#666;"></i>
+                    <p style="margin-top:20px; color:var(--text-sec);">Esta noticia no permite modo lectura directo.</p>
+                    <button onclick="window.open('${url}', '_blank')" class="btn-primary" style="margin-top:20px; padding:12px 24px; border:none; border-radius:10px;">Abrir en pestaña nueva</button>
+                </div>
+            `;
+        });
 };
 
 // Configurar cierre del visor

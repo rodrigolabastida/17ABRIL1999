@@ -622,6 +622,54 @@ function formatearFront(row) {
 }
 
 // ALGORITMO SEMÁNTICO-CUANTITATIVO (Híbrido)
+// --- MOTOR DE MODO LECTURA (READER MODE v1.0) ---
+app.get('/api/v1/reader', async (req, res) => {
+    const url = req.query.url;
+    if (!url) return res.status(400).json({ error: 'URL requerida' });
+
+    try {
+        const response = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36' },
+            signal: AbortSignal.timeout(10000)
+        });
+        const html = await response.text();
+        const $ = cheerio.load(html);
+
+        // Limpieza de elementos basura
+        $('script, style, nav, footer, header, ads, .ads, .sidebar, .comments').remove();
+
+        // Intentar encontrar el contenedor principal de la noticia
+        let content = '';
+        const selectors = ['article', '.article-content', '.entry-content', '.post-content', '.nota-body', '.story-content', '#story-body'];
+        
+        for (const selector of selectors) {
+            const found = $(selector).html();
+            if (found && found.length > 500) {
+                content = found;
+                break;
+            }
+        }
+
+        // Si no encontramos por selector, usamos un fallback de párrafos
+        if (!content) {
+            content = $('p').map((i, el) => $(el).prop('outerHTML')).get().join('');
+        }
+
+        // Limpiar estilos en línea y clases para que hereden los de Intlax
+        const $clean = cheerio.load(content);
+        $clean('*').removeAttr('style').removeAttr('class').removeAttr('id');
+        
+        res.json({
+            status: 'success',
+            title: $('title').text(),
+            content: $clean.html(),
+            originalUrl: url
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Error al procesar el Modo Lectura', details: err.message });
+    }
+});
+
 app.get('/api/v1/feed', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
