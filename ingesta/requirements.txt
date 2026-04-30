@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+aiohttp
+lxml
+beautifulsoup4
+apscheduler
+aiomysql
+python-dotenv
+cryptography

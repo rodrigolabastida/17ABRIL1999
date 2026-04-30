@@ -308,15 +308,32 @@ function generarSlug(texto) {
 }
 
 const FEED_URLS = [
-    { url: 'https://news.google.com/rss/search?q=Tlaxcala&hl=es-419&gl=MX&ceid=MX:es-419', source: 'Google News' },
-    { url: 'https://news.google.com/rss/search?q=Calpulalpan+Tlaxcala&hl=es-419&gl=MX&ceid=MX:es-419', source: 'Google News' },
     { url: 'https://www.elsoldetlaxcala.com.mx/rss.xml', source: 'El Sol de Tlaxcala' },
     { url: 'https://tlaxcala.quadratin.com.mx/feed/', source: 'Quadratín Tlaxcala' },
     { url: 'https://sintesis.com.mx/tlaxcala/feed/', source: 'Síntesis Tlaxcala' },
     { url: 'https://e-tlaxcala.mx/feed/', source: 'e-Tlaxcala' },
     { url: 'https://www.gentetlx.com.mx/feed/', source: 'Gentetlx' },
     { url: 'https://www.385grados.com/feed/', source: '385 Grados' },
-    { url: 'https://faronoticias.com.mx/feed/', source: 'Faro Noticias' }
+    { url: 'https://faronoticias.com.mx/feed/', source: 'Faro Noticias' },
+    { url: 'https://abctlax.com/feed/', source: 'ABC Tlaxcala' },
+    { url: 'https://monitorxpress.com/feed/', source: 'Monitor Tlaxcala' },
+    { url: 'https://agendatlaxcala.com/feed/', source: 'Agenda Tlaxcala' },
+    { url: 'https://revistamomento.com.mx/feed/', source: 'Revista Momento' },
+    { url: 'https://valkiria.com.mx/feed/', source: 'Valkiria' },
+    { url: 'https://pinceldeluzprensa.com/feed/', source: 'Pincel de Luz' },
+    { url: 'https://sndigital.mx/feed/', source: 'SN Digital' },
+    { url: 'https://laprensadetlaxcala.com/feed/', source: 'La Prensa de Tlaxcala' },
+    { url: 'https://lapolilla.com.mx/feed/', source: 'La Polilla' },
+    // Medios Nacionales
+    { url: 'https://www.eluniversal.com.mx/rss.xml', source: 'El Universal' },
+    { url: 'https://www.milenio.com/rss', source: 'Milenio' },
+    { url: 'https://www.excelsior.com.mx/rss.xml', source: 'Excélsior' },
+    { url: 'https://www.jornada.com.mx/rss/portada.xml', source: 'La Jornada' },
+    { url: 'https://www.elsoldemexico.com.mx/rss.xml', source: 'El Sol de México' },
+    { url: 'https://www.eleconomista.com.mx/rss/last_news', source: 'El Economista' },
+    { url: 'https://www.forbes.com.mx/feed/', source: 'Forbes México' },
+    { url: 'https://www.animalpolitico.com/feed/', source: 'Animal Político' },
+    { url: 'https://aristeguinoticias.com/feed/', source: 'Aristegui Noticias' }
 ];
 
 async function extractImageFromUrl(url) {
