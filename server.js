@@ -396,9 +396,9 @@ app.get('/api/v1/hermes/queue', async (req, res) => {
     }
 
     try {
-        // Obtenemos las últimas 15 noticias que tengan imagen real y no sean repetidas
+        // Obtenemos las últimas 15 noticias que tengan imagen real
         const rows = await dbQuery.all(`
-            SELECT id, titulo, resumen, imageUrl, linkOriginal, fuente, municipio_tag, fecha_captura 
+            SELECT id, titulo, resumen, imageUrl, linkOriginal, fuente, municipio_tag, fecha_captura, slug 
             FROM noticias 
             WHERE imageUrl NOT LIKE '%placeholder%' 
             ORDER BY fecha_captura DESC 
@@ -413,7 +413,8 @@ app.get('/api/v1/hermes/queue', async (req, res) => {
                 title: r.titulo,
                 summary: r.resumen || 'Sin resumen disponible',
                 image: r.imageUrl,
-                url: r.linkOriginal,
+                urlOriginal: r.linkOriginal,
+                intlaxUrl: `https://intlax.com/noticias/${r.slug}`,
                 source: r.fuente,
                 municipality: r.municipio_tag,
                 timestamp: r.fecha_captura
