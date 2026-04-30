@@ -385,6 +385,44 @@ async function extractImageFromUrl(url) {
     }
 }
 
+// --- RUTA EXCLUSIVA PARA HERMES (Social Media AI) ---
+app.get('/api/v1/hermes/queue', async (req, res) => {
+    const apiKey = req.headers['x-hermes-key'];
+    const validKey = process.env.HERMES_API_KEY || 'hermes_secret_2024';
+
+    if (apiKey !== validKey) {
+        return res.status(401).json({ error: 'No autorizado para Hermes' });
+    }
+
+    try {
+        // Obtenemos las últimas 15 noticias que tengan imagen real y no sean repetidas
+        const rows = await dbQuery.all(`
+            SELECT id, titulo, resumen, imageUrl, linkOriginal, fuente, municipio_tag, fecha_captura 
+            FROM noticias 
+            WHERE imageUrl NOT LIKE '%placeholder%' 
+            ORDER BY fecha_captura DESC 
+            LIMIT 15
+        `);
+        
+        res.json({
+            status: 'success',
+            count: rows.length,
+            data: rows.map(r => ({
+                id: r.id,
+                title: r.titulo,
+                summary: r.resumen || 'Sin resumen disponible',
+                image: r.imageUrl,
+                url: r.linkOriginal,
+                source: r.fuente,
+                municipality: r.municipio_tag,
+                timestamp: r.fecha_captura
+            }))
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Error al obtener cola para Hermes' });
+    }
+});
+
 // Configuración de Búsqueda Activa (Deep Crawl)
 const CRAWL_KEYWORDS = ['Calpulalpan', 'Tlaxcala', 'Apizaco', 'Huamantla'];
 const CRAWL_SOURCES = [
