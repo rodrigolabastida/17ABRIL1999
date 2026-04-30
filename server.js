@@ -247,10 +247,11 @@ async function initDB() {
         ];
         for (const sql of schema) { await pool.execute(sql); }
         
-        // Limpieza retroactiva de fuentes Google News
-        await pool.execute("UPDATE noticias SET fuente = TRIM(SUBSTRING_INDEX(titulo, ' - ', -1)) WHERE fuente = 'Google News' AND titulo LIKE '% - %'");
+        // Limpieza profunda: Eliminar noticias residuales de Google News (sin imágenes reales)
+        await pool.execute("DELETE FROM noticias WHERE fuente = 'Google News' OR imageUrl LIKE '%googleusercontent.com%' OR imageUrl LIKE '%placeholder%'");
+        console.log('✅ Purga de Google News / Placeholders completada.');
         
-        console.log('✅ Tablas MariaDB sincronizadas v6.3.0.');
+        console.log('✅ Tablas MariaDB sincronizadas v6.3.9.');
     } catch (dbErr) {
         console.error('⚠️ ALERTA: MariaDB no disponible. Activando Respaldo SQLite.');
         dbType = 'sqlite';
