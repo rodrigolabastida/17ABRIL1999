@@ -7,3 +7,5 @@ apscheduler
 aiomysql
 python-dotenv
 cryptography
+Pillow
+mysql-connector-python
