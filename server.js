@@ -388,7 +388,7 @@ async function extractImageFromUrl(url) {
 // --- RUTA EXCLUSIVA PARA HERMES (Social Media AI) ---
 app.get('/api/v1/hermes/queue', async (req, res) => {
     const apiKey = req.headers['x-hermes-key'];
-    const validKey = process.env.HERMES_API_KEY || 'hermes_secret_2024';
+    const validKey = process.env.HERMES_API_KEY || 'hermes_secret_2024_intlax';
 
     if (apiKey !== validKey) {
         return res.status(401).json({ error: 'No autorizado para Hermes' });
