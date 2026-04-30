@@ -825,21 +825,19 @@ async function postQuickComment(noticiaId) {
 window.postQuickComment = postQuickComment;
 window.renderForosView = renderForosView;
 
-// --- LÓGICA DE VISOR IN-APP (v1.5) ---
+// --- LÓGICA DE APERTURA DE NOTICIAS (v2.0 - Bye Bye Iframes) ---
 window.openInAppBrowser = function(url) {
-    const modal = document.getElementById('iframe-modal');
-    const iframe = document.getElementById('news-iframe');
+    if (!url) return;
     
-    if (!modal || !iframe) return;
-
-    // Mostrar modal
-    modal.classList.remove('hidden');
-    document.body.style.overflow = 'hidden'; 
-
-    // Inyectar URL
-    iframe.src = url;
+    console.log('🚀 Abriendo noticia original en nueva pestaña:', url);
     
-    console.log('🌐 Cargando visor in-app para:', url);
+    // Abrimos en una pestaña nueva para evitar bloqueos X-Frame-Options
+    const newWindow = window.open(url, '_blank');
+    
+    // Si el navegador bloqueó el popup, avisamos al usuario (raro pero posible)
+    if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+        alert('Por favor, permite las ventanas emergentes para ver la nota completa.');
+    }
 };
 
 // Configurar cierre del visor
