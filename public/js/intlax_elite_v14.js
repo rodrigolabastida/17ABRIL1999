@@ -174,7 +174,7 @@ function renderArticleDetail(noticia) {
                 <h1 style="font-size:28px; font-weight:800; margin-bottom:18px; line-height:1.2; letter-spacing:-0.5px;">${noticia.title}</h1>
                 <p style="color:var(--text-sec); font-size:17px; margin-bottom:30px; line-height:1.7;">${noticia.summary}</p>
                 
-                <button onclick="openInAppBrowser('${noticia.link}')" class="btn-primary" style="width:100%; display:block; text-align:center; border:none; margin-bottom:15px; padding:18px; font-size:17px; border-radius:15px; box-shadow:0 10px 30px rgba(255,204,0,0.2); color:#000; font-weight:800; cursor:pointer;">VER NOTA COMPLETA</button>
+                <button onclick="window.open('${noticia.link}', '_blank')" class="btn-primary" style="width:100%; display:block; text-align:center; border:none; margin-bottom:15px; padding:18px; font-size:17px; border-radius:15px; box-shadow:0 10px 30px rgba(255,204,0,0.2); color:#000; font-weight:800; cursor:pointer;">VER NOTA COMPLETA</button>
                 
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:40px;">
                     <button onclick="shareArticle('${(noticia.title || '').replace(/'/g, "\\\\'")}', window.location.origin + '/noticias/${noticia.slug}')" class="btn-secondary" style="display:flex; align-items:center; justify-content:center; gap:8px; padding:15px; border-radius:12px; font-size:15px; font-weight:700;">
@@ -757,7 +757,7 @@ async function renderForosView(categoria = 'Todo') {
                         </div>
                     </div>
                     
-                    <div class="foro-main" onclick="openInAppBrowser('${item.link}')">
+                    <div class="foro-main" onclick="window.open('${item.link}', '_blank')">
                         <div class="foro-main-text">
                             <h3 class="foro-title">${item.title}</h3>
                         </div>

@@ -700,18 +700,32 @@ app.get('/api/v1/search', async (req, res) => {
     const { q, lat, lng } = req.query;
     try {
         let rows;
+        const term = `%${q || ''}%`;
+
         if (lat && lng && lat !== 'null' && lng !== 'null') {
-            const query = `
-                SELECT *, 
-                (6371 * acos(cos(radians(?)) * cos(radians(lat)) * cos(radians(lng) - radians(?)) + sin(radians(?)) * sin(radians(lat)))) AS distance 
-                FROM noticias 
-                WHERE (titulo LIKE ? OR resumen LIKE ? OR municipio_tag LIKE ?) 
-                OR (lat IS NOT NULL AND (6371 * acos(cos(radians(?)) * cos(radians(lat)) * cos(radians(lng) - radians(?)) + sin(radians(?)) * sin(radians(lat)))) < 30)
-                ORDER BY distance ASC, fecha_captura DESC 
-                LIMIT 40
-            `;
-            const term = `%${q || ''}%`;
-            rows = await dbQuery.all(query, [lat, lng, lat, term, term, term, lat, lng, lat]);
+            if (dbType === 'mariadb') {
+                const query = `
+                    SELECT *, 
+                    (6371 * acos(cos(radians(?)) * cos(radians(lat)) * cos(radians(lng) - radians(?)) + sin(radians(?)) * sin(radians(lat)))) AS distance 
+                    FROM noticias 
+                    WHERE (titulo LIKE ? OR resumen LIKE ? OR municipio_tag LIKE ?) 
+                    OR (lat IS NOT NULL AND (6371 * acos(cos(radians(?)) * cos(radians(lat)) * cos(radians(lng) - radians(?)) + sin(radians(?)) * sin(radians(lat)))) < 30)
+                    ORDER BY distance ASC, fecha_captura DESC 
+                    LIMIT 40
+                `;
+                rows = await dbQuery.all(query, [lat, lng, lat, term, term, term, lat, lng, lat]);
+            } else {
+                // Fallback SQLite (Aproximación de Manhattan para distancia)
+                const query = `
+                    SELECT *, (abs(lat - ?) + abs(lng - ?)) as distance
+                    FROM noticias 
+                    WHERE (titulo LIKE ? OR resumen LIKE ? OR municipio_tag LIKE ?) 
+                    OR (lat IS NOT NULL AND (abs(lat - ?) + abs(lng - ?)) < 0.5)
+                    ORDER BY distance ASC, fecha_captura DESC 
+                    LIMIT 40
+                `;
+                rows = await dbQuery.all(query, [lat, lng, term, term, term, lat, lng]);
+            }
         } else {
             const query = `
                 SELECT * FROM noticias 
@@ -719,10 +733,9 @@ app.get('/api/v1/search', async (req, res) => {
                 ORDER BY fecha_captura DESC 
                 LIMIT 40
             `;
-            const term = `%${q}%`;
             rows = await dbQuery.all(query, [term, term, term]);
         }
-        res.json({ resultados: rows.map(formatearFront) });
+        res.json({ resultados: (rows || []).map(formatearFront) });
     } catch (err) {
         console.error('Search error:', err);
         res.status(500).json({ error: 'Error en el motor de búsqueda' });
