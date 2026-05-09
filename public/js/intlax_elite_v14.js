@@ -644,44 +644,33 @@ async function executeSearch(term) {
 
 function renderSearchResults(resultados) {
     const resultadosContainer = document.getElementById('contenedor-resultados-busqueda');
+    const municipiosSection = document.getElementById('municipios-section');
     let feedHTML = '';
     
+    // Ocultar sección de municipios si hay resultados o se intentó buscar
+    if(municipiosSection) municipiosSection.classList.add('hidden');
+    
     if (resultados && resultados.length > 0) {
-        resultados.forEach(noticia => {
+        resultados.forEach((noticia, index) => {
             feedHTML += `
-                <article class="news-card" data-id="${noticia.id}">
-                    <img class="news-thumb" src="${noticia.imageUrl}" alt="${noticia.source}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
-                    <div class="news-info">
-                        <h3 class="news-title">${noticia.title}</h3>
-                        <div class="news-bottom">
-                            <div class="news-meta">
-                                <span>${noticia.category}</span>
-                                <span>• ${(noticia.views/1000).toFixed(1)}K vistas</span>
-                            </div>
-                            <div class="news-actions">
-                                <i class='bx bx-message-rounded'></i>
-                                <i class='bx bx-share-alt' ></i>
+                <a href="/noticias/${noticia.slug}" class="news-card-link" style="text-decoration:none; color:inherit;">
+                    <article class="news-card" data-id="${noticia.id}" style="animation-delay: ${index * 0.05}s">
+                        <img class="news-thumb" src="${noticia.imageUrl}" alt="${noticia.source}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
+                        <div class="news-info">
+                            <h3 class="news-title">${noticia.title || noticia.titulo || 'Sin título'}</h3>
+                            <div class="news-bottom">
+                                <div class="news-meta">
+                                     <span style="color:var(--accent); font-weight:700;">${noticia.source || noticia.fuente || 'Medio'}</span>
+                                     <span>• ${((noticia.views || noticia.vistas || 0)/1000).toFixed(1)}K lecturas</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </article>
+                    </article>
+                </a>
             `;
         });
         
         resultadosContainer.innerHTML = feedHTML;
-        
-        const searchCards = document.querySelectorAll('#contenedor-resultados-busqueda .news-card');
-        searchCards.forEach(card => {
-            card.addEventListener('click', () => {
-                const id = card.getAttribute('data-id');
-                // Para búsqueda, necesitamos que globalArticles tenga los resultados o buscarlos
-                const article = resultados.find(a => a.id === id);
-                if(article && article.slug) {
-                    window.location.href = '/noticias/' + article.slug;
-                }
-            });
-        });
-
     } else {
         resultadosContainer.innerHTML = `
             <div id="empty-state-search" class="empty-state">
