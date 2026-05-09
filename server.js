@@ -642,6 +642,7 @@ function formatearFront(row) {
         link: row.linkOriginal,
         slug: row.slug,
         puntuacion: row.puntuacion || 3,
+        votos_totales: row.votos_totales_count || 0,
         time: row.fecha_publicacion ? new Date(row.fecha_publicacion).toLocaleDateString() : 'Hoy',
         image: (row.imageUrl && row.imageUrl !== '' && row.imageUrl !== 'null') ? row.imageUrl : '/img/placeholder-noticia.jpg'
     };
@@ -801,11 +802,25 @@ app.post('/api/v1/valorar', async (req, res) => {
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     const { noticia_id, puntos } = req.body;
     try {
+        // Registrar voto
         await dbQuery.execute('INSERT INTO valoraciones (noticia_id, user_id, puntos, ip_address) VALUES (?, ?, ?, ?)', [noticia_id, req.user ? req.user.id : null, puntos, ip]);
+        
+        // Si el voto es positivo (4 o 5), incrementamos el contador rápido de la noticia
         if (puntos >= 4) {
             await dbQuery.execute('UPDATE noticias SET votos_positivos_count = votos_positivos_count + 1 WHERE id = ?', [noticia_id]);
         }
-        res.json({ ok: true });
+
+        // Obtener estadísticas actualizadas
+        const stats = await dbQuery.get('SELECT AVG(puntos) as promedio, COUNT(*) as total FROM valoraciones WHERE noticia_id = ?', [noticia_id]);
+        
+        // Actualizar el promedio y total en la tabla noticias para caché/feed rápido
+        await dbQuery.execute('UPDATE noticias SET puntuacion = ?, votos_totales_count = ? WHERE id = ?', [Math.round(stats.promedio || 3), stats.total || 0, noticia_id]);
+
+        res.json({ 
+            ok: true, 
+            promedio: stats.promedio || 0, 
+            total: stats.total || 0 
+        });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

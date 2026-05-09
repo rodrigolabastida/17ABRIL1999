@@ -420,8 +420,11 @@ function renderHeroCarousel(noticias) {
                     <div class="hero-img-wrapper" style="background:#1a1a1c;">
                         <img src="${noticia.imageUrl}" alt="${noticia.title}" style="width:100%; height:100%; object-fit:cover;" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
                         <div class="hero-gradient" style="position:absolute; inset:0; background:linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 70%); padding:15px; display:flex; flex-direction:column; justify-content:flex-end;">
-                            <div class="hero-meta" style="margin-bottom:8px;">
+                            <div class="hero-meta" style="margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
                                 <span class="tag" style="color:var(--accent); font-weight:800; font-size:11px;">${noticia.source}</span>
+                                <span style="background:rgba(255,204,0,0.2); color:var(--accent); padding:2px 8px; border-radius:10px; font-size:10px; font-weight:800; display:flex; align-items:center; gap:3px;">
+                                    <i class='bx bxs-star'></i> ${noticia.puntuacion || 3}
+                                </span>
                             </div>
                             <h2 class="hero-title" style="font-size:18px; font-weight:800; color:#fff; line-height:1.2;">${noticia.title}</h2>
                         </div>
@@ -449,7 +452,8 @@ function renderFeed(noticias) {
                         </div>
                         <h3 class="news-title">${noticia.title}</h3>
                         <div class="news-bottom">
-                            <div class="news-meta">
+                            <div class="news-meta" style="display:flex; align-items:center; gap:10px;">
+                                <span style="display:flex; align-items:center; gap:3px; color:var(--accent); font-weight:800;"><i class='bx bxs-star'></i> ${noticia.puntuacion || 3}</span>
                                 <span>${(noticia.views/1000).toFixed(1)}K lecturas</span>
                             </div>
                             <div class="news-actions">
