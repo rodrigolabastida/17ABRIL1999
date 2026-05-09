@@ -838,6 +838,7 @@ window.openInAppBrowser = function(url) {
     if (!modal || !readerContent) return;
 
     // Mostrar modal y estado de carga
+    modal.style.display = 'flex'; // Forzamos visibilidad ante bloqueos de renderArticleDetail
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     readerContainer.style.display = 'block';
@@ -879,7 +880,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const modal = document.getElementById('iframe-modal');
         const iframe = document.getElementById('news-iframe');
         
-        if (modal) modal.classList.add('hidden');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.style.display = 'none';
+        }
         if (iframe) iframe.src = 'about:blank'; 
         document.body.style.overflow = '';
     });
