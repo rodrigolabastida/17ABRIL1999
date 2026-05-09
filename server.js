@@ -13,6 +13,26 @@ const municipalities = JSON.parse(fs.readFileSync(path.join(__dirname, 'municipa
 const { spawn } = require('child_process');
 const sqlite3 = require('sqlite3').verbose();
 
+// Mapeo de coordenadas aproximadas por municipio para geolocalización
+const MUNICIPIO_COORDS = {
+    "Tlaxcala": { lat: 19.313, lng: -98.238 },
+    "Apizaco": { lat: 19.416, lng: -98.140 },
+    "Huamantla": { lat: 19.313, lng: -97.925 },
+    "Chiautempan": { lat: 19.315, lng: -98.193 },
+    "Calpulalpan": { lat: 19.591, lng: -98.572 },
+    "Zacatelco": { lat: 19.215, lng: -98.243 },
+    "San Pablo del Monte": { lat: 19.116, lng: -98.167 },
+    "Tlaxco": { lat: 19.613, lng: -98.121 },
+    "Ixtacuixtla": { lat: 19.325, lng: -98.375 },
+    "Contla": { lat: 19.330, lng: -98.175 },
+    "Panotla": { lat: 19.310, lng: -98.270 },
+    "Tetla": { lat: 19.430, lng: -98.100 },
+    "Totolac": { lat: 19.320, lng: -98.250 },
+    "Papalotla": { lat: 19.160, lng: -98.200 },
+    "Yauhquemehcan": { lat: 19.370, lng: -98.150 },
+    "OTRO": { lat: 19.313, lng: -98.238 }
+};
+
 // Configuración de variables de entorno con respaldo para Hostinger
 const localEnv = path.join(__dirname, '.env');
 const parentEnv = path.join(__dirname, '..', '.env');
@@ -486,10 +506,12 @@ async function deepCrawlKeywords() {
                         const slug = generarSlug(item.title);
                         const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
+                        const coords = MUNICIPIO_COORDS[nlp.municipio] || MUNICIPIO_COORDS["OTRO"];
+
                         await dbQuery.execute(`
-                            INSERT INTO noticias (id, titulo, resumen, linkOriginal, imageUrl, fuente, categoria_impacto, municipio_tag, multiplicador_categoria, slug, fecha_publicacion, fecha_captura, puntuacion)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        `, [Math.random().toString(36).substr(2, 9), item.title, "", item.link, imageUrl, source.name, nlp.categoria, nlp.municipio, nlp.multiplicador, slug, now, now, 50]);
+                            INSERT INTO noticias (id, titulo, resumen, linkOriginal, imageUrl, fuente, categoria_impacto, municipio_tag, multiplicador_categoria, slug, fecha_publicacion, fecha_captura, puntuacion, lat, lng)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        `, [Math.random().toString(36).substr(2, 9), item.title, "", item.link, imageUrl, source.name, nlp.categoria, nlp.municipio, nlp.multiplicador, slug, now, now, 50, coords.lat, coords.lng]);
                         
                         totalNuevas++;
                     } catch (err) { /* Silencioso por item */ }
@@ -578,18 +600,21 @@ async function fetchAllRssFeeds(force = false) {
                 const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
                 
                 try {
+                    const coords = MUNICIPIO_COORDS[nlp.municipio] || MUNICIPIO_COORDS["OTRO"];
                     const res = await dbQuery.execute(`
-                        INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, fecha_captura, slug, categoria_impacto, municipio_tag, multiplicador_categoria)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO noticias (id, titulo, resumen, imageUrl, linkOriginal, fuente, fecha_publicacion, puntuacion, fecha_captura, slug, categoria_impacto, municipio_tag, multiplicador_categoria, lat, lng)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON DUPLICATE KEY UPDATE 
                             imageUrl = VALUES(imageUrl),
                             fuente = VALUES(fuente),
                             puntuacion = VALUES(puntuacion),
                             categoria_impacto = VALUES(categoria_impacto),
-                            multiplicador_categoria = VALUES(multiplicador_categoria)
+                            multiplicador_categoria = VALUES(multiplicador_categoria),
+                            lat = VALUES(lat),
+                            lng = VALUES(lng)
                     `, [Math.random().toString(36).substr(2, 9), title, summaryText, imageUrl, item.link, source, 
                        item.pubDate ? new Date(item.pubDate).toISOString().slice(0, 19).replace('T', ' ') : now, 
-                       50, now, slug, nlp.categoria, nlp.municipio, nlp.multiplicador]);
+                       50, now, slug, nlp.categoria, nlp.municipio, nlp.multiplicador, coords.lat, coords.lng]);
                     
                     if (res.affectedRows === 1) nuevas++;
                     else actualizadas++;
@@ -671,6 +696,39 @@ app.get('/api/v1/reader', async (req, res) => {
     }
 });
 
+app.get('/api/v1/search', async (req, res) => {
+    const { q, lat, lng } = req.query;
+    try {
+        let rows;
+        if (lat && lng && lat !== 'null' && lng !== 'null') {
+            const query = `
+                SELECT *, 
+                (6371 * acos(cos(radians(?)) * cos(radians(lat)) * cos(radians(lng) - radians(?)) + sin(radians(?)) * sin(radians(lat)))) AS distance 
+                FROM noticias 
+                WHERE (titulo LIKE ? OR resumen LIKE ? OR municipio_tag LIKE ?) 
+                OR (lat IS NOT NULL AND (6371 * acos(cos(radians(?)) * cos(radians(lat)) * cos(radians(lng) - radians(?)) + sin(radians(?)) * sin(radians(lat)))) < 30)
+                ORDER BY distance ASC, fecha_captura DESC 
+                LIMIT 40
+            `;
+            const term = `%${q || ''}%`;
+            rows = await dbQuery.all(query, [lat, lng, lat, term, term, term, lat, lng, lat]);
+        } else {
+            const query = `
+                SELECT * FROM noticias 
+                WHERE titulo LIKE ? OR resumen LIKE ? OR municipio_tag LIKE ?
+                ORDER BY fecha_captura DESC 
+                LIMIT 40
+            `;
+            const term = `%${q}%`;
+            rows = await dbQuery.all(query, [term, term, term]);
+        }
+        res.json({ resultados: rows.map(formatearFront) });
+    } catch (err) {
+        console.error('Search error:', err);
+        res.status(500).json({ error: 'Error en el motor de búsqueda' });
+    }
+});
+
 app.get('/api/v1/feed', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -709,16 +767,7 @@ app.get('/api/v1/feed', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/v1/municipio/:name', async (req, res) => {
-    try {
-        const name = req.params.name;
-        // Búsqueda insensible a mayúsculas/minúsculas usando LOWER
-        const rows = await dbQuery.all('SELECT * FROM noticias WHERE LOWER(municipio_tag) = LOWER(?) ORDER BY fecha_captura DESC', [name]);
-        res.json(rows);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
+// Ruta unificada de municipios integrada más abajo (v6.5.2)
 
 app.get('/api/v1/noticias/:slug', async (req, res) => {
     try {

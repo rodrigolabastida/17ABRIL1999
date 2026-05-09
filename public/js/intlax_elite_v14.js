@@ -1060,11 +1060,11 @@ function renderMunicipioView(name, articles) {
                     <article class="news-card" data-id="${noticia.id}" style="animation-delay: ${index * 0.05}s">
                         <img class="news-thumb" src="${noticia.imageUrl}" alt="${noticia.source}" onerror="this.onerror=null; this.src='/img/placeholder-noticia.jpg';">
                         <div class="news-info">
-                            <h3 class="news-title">${noticia.title}</h3>
+                            <h3 class="news-title">${noticia.title || noticia.titulo || 'Sin título'}</h3>
                             <div class="news-bottom">
                                 <div class="news-meta">
-                                     <span style="color:var(--accent); font-weight:700;">${noticia.source}</span>
-                                     <span>• ${(noticia.views/1000).toFixed(1)}K lecturas</span>
+                                     <span style="color:var(--accent); font-weight:700;">${noticia.source || noticia.fuente || 'Medio'}</span>
+                                     <span>• ${((noticia.views || noticia.vistas || 0)/1000).toFixed(1)}K lecturas</span>
                                 </div>
                             </div>
                         </div>
