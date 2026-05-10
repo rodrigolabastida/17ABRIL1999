@@ -1007,6 +1007,11 @@ app.get('/municipio/:nombre', async (req, res) => {
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Rutas Legales (Meta/WhatsApp API)
+app.get('/privacidad', (req, res) => res.sendFile(path.join(__dirname, 'public/privacidad.html')));
+app.get('/terminos', (req, res) => res.sendFile(path.join(__dirname, 'public/terminos.html')));
+
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public/home.html')));
 
 app.listen(PORT, async () => {

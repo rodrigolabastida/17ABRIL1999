@@ -3,11 +3,12 @@ import sqlite3
 import requests
 from datetime import datetime
 
-# Configuración
+# Configuración con rutas absolutas para ejecución en segundo plano (cron)
+BASE_DIR = "/Users/rodrigolabastida/Documents/INTLAX.COM/local_archive"
 API_URL = "https://intlax.com/api/v1/hermes/queue"
 API_KEY = "hermes_secret_2024_intlax"
-DB_PATH = "database.db"
-IMG_FOLDER = "imagenes"
+DB_PATH = os.path.join(BASE_DIR, "database.db")
+IMG_FOLDER = os.path.join(BASE_DIR, "imagenes")
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
